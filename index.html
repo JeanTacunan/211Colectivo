@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#08090b" />
+  <meta name="description" content="Yaris 211: servicio de colectivo nocturno, información del vehículo, horarios y reseñas de pasajeros." />
+  <title>Yaris 211 · Confianza en cada ruta</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="site-header" id="top">
+    <a class="brand" href="#inicio" aria-label="Yaris 211, ir al inicio"><span>211</span> YARIS</a>
+    <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="mainNav" aria-label="Abrir menú"><i></i><i></i></button>
+    <nav id="mainNav" aria-label="Navegación principal">
+      <a href="#inicio">Inicio</a>
+      <a href="#vehiculo">Yaris 211</a>
+      <a href="#horarios">Horarios</a>
+      <a href="#resenas">Reseñas</a>
+      <a href="#conoceme">Sobre mí</a>
+      <button class="account-button" id="accountButton" type="button">Ingresar</button>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero" id="inicio">
+      <div class="hero-glow" aria-hidden="true"></div>
+      <div class="hero-copy reveal">
+        <p class="kicker"><span></span> Toyota Yaris 211</p>
+        <h1>Hecho para<br><em>la ruta.</em></h1>
+        <p class="hero-intro">Yaris E 2019 full equipo. Presencia deportiva y confianza en cada recorrido.</p>
+        <div class="hero-status" aria-live="polite">
+          <i id="heroStatusDot"></i><strong id="heroStatusText">Consultando horario…</strong>
+        </div>
+        <div class="hero-actions">
+          <a class="button primary" href="#vehiculo">Ver el Yaris</a>
+          <a class="button ghost instagram-button" href="https://www.instagram.com/jeanp.tacunan/" target="_blank" rel="noopener"><span class="instagram-icon" aria-hidden="true"><i></i></span> Instagram <span>↗</span></a>
+        </div>
+      </div>
+      <div class="hero-visual reveal">
+        <div class="number-mark" aria-hidden="true">211</div>
+        <img src="assets/yaris-211-front.png" alt="Toyota Yaris rojo 211 visto desde el frente" />
+        <div class="sale-card">
+          <span>Precio referencial</span>
+          <strong>S/ 45,000</strong>
+          <div class="quote-line">
+            <small>Cotización referencial</small>
+            <details class="quote-info">
+              <summary aria-label="Más información sobre la cotización">ⓘ</summary>
+              <p>Precio estimado con apoyo de herramientas de inteligencia artificial considerando año, versión, kilometraje y características del vehículo. El valor es referencial y puede variar después de una evaluación presencial.</p>
+            </details>
+          </div>
+        </div>
+      </div>
+      <a class="scroll-hint" href="#vehiculo"><span>Desliza</span><i>↓</i></a>
+    </section>
+
+    <section class="vehicle section" id="vehiculo">
+      <div class="section-heading reveal">
+        <p class="kicker"><span></span> La máquina</p>
+        <h2>No pasa<br><em>desapercibido.</em></h2>
+        <p>Personalizado con una estética deportiva y construido sobre la confiabilidad del Yaris sedán.</p>
+      </div>
+
+      <div class="vehicle-stage reveal">
+        <div class="stage-copy">
+          <span class="edition">EDICIÓN<br><b>211</b></span>
+          <p>Frente Lexus · Faros LED<br>Aros deportivos · Alerón MPS</p>
+        </div>
+        <img src="assets/yaris-211-rear.png" alt="Vista posterior del Yaris 211 con alerón MPS y luces LED" />
+      </div>
+
+      <div class="spec-dashboard reveal" aria-label="Ficha técnica del vehículo">
+        <div class="spec-dashboard-head"><strong>Yaris E · 2019</strong><span>Full equipo</span></div>
+        <div class="spec-dashboard-grid">
+          <article><strong>1.3 L</strong><span>Motor</span></article>
+          <article><strong>98 HP</strong><span>Potencia</span></article>
+          <article><strong>95,000 km</strong><span>Recorrido</span></article>
+          <article><strong>1,329 cc</strong><span>Cilindrada</span></article>
+        </div>
+        <p class="spec-tech">Dual VVT-i <i>·</i> EFI <i>·</i> 4 cilindros en línea</p>
+        <div class="feature-list" aria-label="Personalización del vehículo">
+          <span>Frente Lexus</span><span>Faros LED</span><span>Aros deportivos</span><span>Alerón MPS</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="schedule section" id="horarios">
+      <div class="schedule-main reveal">
+        <p class="kicker"><span></span> Horario de servicio</p>
+        <h2>Nos vemos<br><em>de noche.</em></h2>
+        <div class="live-status" id="liveStatus" aria-live="polite">
+          <i id="statusDot"></i>
+          <div><strong id="statusText">Consultando horario…</strong><span id="statusDetail">Hora de Perú</span></div>
+        </div>
+      </div>
+      <div class="schedule-list reveal">
+        <article><div><span>LUN — VIE</span><strong>Lunes a viernes</strong></div><time>6:30 p. m. — 11:59 p. m.</time></article>
+        <article><div><span>SÁBADO</span><strong>Sábado</strong></div><time>6:00 p. m. — 2:00 a. m.<small>del domingo</small></time></article>
+        <article><div><span>DOMINGO</span><strong>Domingo</strong></div><time>6:00 p. m. — 11:59 p. m.</time></article>
+        <p>El estado se actualiza automáticamente según la hora de Lima, Perú.</p>
+      </div>
+    </section>
+
+    <section class="experience section">
+      <div class="experience-media reveal">
+        <span class="photo-label">ORIGINAL / 211</span>
+        <img src="assets/yaris-stock.png" alt="Toyota Yaris rojo en versión original" />
+      </div>
+      <div class="experience-copy reveal">
+        <p class="kicker"><span></span> Tu viaje, bien llevado</p>
+        <h2>Una buena experiencia<br><em>en cada ruta.</em></h2>
+        <p>Ambiente limpio, buena música y tranquilidad, con cero incomodidades para pasajeras y pasajeros.</p>
+        <div class="journey-pillars" aria-label="Principios de la experiencia">
+          <div><strong>Seguro</strong><small>Responsabilidad en cada recorrido.</small></div>
+          <div><strong>Cómodo</strong><small>Limpieza, música y tranquilidad.</small></div>
+          <div><strong>Respetuoso</strong><small>Tu espacio siempre cuenta.</small></div>
+          <div><strong>Confiable</strong><small>Empatía y solidaridad en ruta.</small></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="reviews section" id="resenas">
+      <div class="reviews-head reveal">
+        <div>
+          <p class="kicker"><span></span> Tu experiencia importa</p>
+          <h2>¿Cómo estuvo<br><em>tu viaje?</em></h2>
+        </div>
+        <div class="rating-summary">
+          <strong id="ratingAverage">0.0</strong>
+          <div><div class="summary-stars" aria-label="Calificación promedio">★★★★★</div><span id="ratingCount">Aún no hay reseñas</span></div>
+        </div>
+      </div>
+
+      <div class="review-feed reveal" id="reviewFeed">
+        <div class="empty-reviews"><span>☆</span><strong>Sé la primera persona en calificar</strong><p>Tu reseña ayuda a mejorar el servicio y genera confianza en la comunidad.</p></div>
+      </div>
+      <div class="review-actions reveal">
+        <button class="button text-button" id="toggleReviewsButton" type="button" hidden>Ver todas las reseñas</button>
+        <button class="button primary" id="writeReviewButton" type="button">Escribir reseña</button>
+      </div>
+      <div class="review-form-wrap" id="reviewComposer" hidden>
+        <div class="review-composer-head">
+          <div>
+          <span class="auth-badge" id="authBadge">Necesitas una cuenta para calificar</span>
+          <h3>Califica el servicio</h3>
+          </div>
+          <button class="composer-close" id="closeReviewComposer" type="button" aria-label="Cerrar formulario">×</button>
+        </div>
+          <form id="reviewForm">
+            <fieldset class="star-input" id="starInput" disabled>
+              <legend>Selecciona de 1 a 5 estrellas</legend>
+              <div>
+                <button type="button" data-rating="1" aria-label="1 estrella">★</button>
+                <button type="button" data-rating="2" aria-label="2 estrellas">★</button>
+                <button type="button" data-rating="3" aria-label="3 estrellas">★</button>
+                <button type="button" data-rating="4" aria-label="4 estrellas">★</button>
+                <button type="button" data-rating="5" aria-label="5 estrellas">★</button>
+              </div>
+              <output id="ratingOutput">0 de 5</output>
+            </fieldset>
+            <label for="reviewText">Cuéntanos tu experiencia</label>
+            <textarea id="reviewText" rows="4" maxlength="280" placeholder="¿Qué fue lo que más valoraste del servicio?" disabled required></textarea>
+            <div class="form-bottom"><small>Máximo 280 caracteres</small><button class="button primary" type="submit" id="submitReview" disabled>Publicar reseña</button></div>
+          </form>
+          <button class="signin-prompt" id="signinPrompt" type="button">Crear cuenta o ingresar <span>→</span></button>
+      </div>
+    </section>
+
+    <section class="about section" id="conoceme">
+      <div class="about-card reveal">
+        <div class="about-topline"><span>SOBRE MÍ</span><a href="https://www.instagram.com/jeanp.tacunan/" target="_blank" rel="noopener">@jeanp.tacunan ↗</a></div>
+        <div class="about-layout">
+          <div class="about-title">
+            <span class="monogram">JTP</span>
+            <h2>Tecnología,<br>ruta y <em>propósito.</em></h2>
+          </div>
+          <div class="about-bio">
+            <p>La experiencia digital de 211 Yaris fue desarrollada por <strong>JTP Soluciones Tecnológicas</strong>.</p>
+            <div class="role"><i></i><div><span>Actualmente</span><strong>Analista de Desarrollo Junior & Soporte TI</strong></div></div>
+            <div class="education">
+              <div class="university-logo"><img src="assets/universidad-continental.png" alt="Universidad Continental" /></div>
+              <p><span>Formación profesional</span><strong>Bach. en Ingeniería de Sistemas e Informática</strong></p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="closing">
+      <div class="closing-copy reveal"><p>Confianza en cada ruta.</p><h2>211</h2><a href="https://www.instagram.com/jeanp.tacunan/" target="_blank" rel="noopener">Hablemos por Instagram ↗</a></div>
+      <img src="assets/yaris-211-front.png" alt="" />
+    </section>
+  </main>
+
+  <footer>
+    <a class="brand" href="#top"><span>211</span> YARIS</a>
+    <p>Servicio de colectivo · Perú</p>
+    <p>Desarrollado por <strong>JTP Soluciones Tecnológicas</strong></p>
+  </footer>
+
+  <div class="mobile-action-bar" aria-label="Acciones rápidas">
+    <a href="#horarios"><span class="mobile-status-dot" id="mobileStatusDot"></span><span id="mobileStatusText">Ver horario</span></a>
+    <a href="https://www.instagram.com/jeanp.tacunan/" target="_blank" rel="noopener"><span class="instagram-icon" aria-hidden="true"><i></i></span> Instagram</a>
+  </div>
+
+  <div class="modal" id="authModal" role="dialog" aria-modal="true" aria-labelledby="authTitle" hidden>
+    <div class="modal-backdrop" data-close-modal></div>
+    <div class="modal-card">
+      <button class="modal-close" type="button" data-close-modal aria-label="Cerrar">×</button>
+      <span class="modal-mark">211</span>
+      <h2 id="authTitle">Únete a la comunidad</h2>
+      <p>Regístrate para dejar una reseña verificada del servicio.</p>
+      <div class="auth-tabs" role="tablist">
+        <button class="active" type="button" role="tab" data-auth-tab="register" aria-selected="true">Crear cuenta</button>
+        <button type="button" role="tab" data-auth-tab="login" aria-selected="false">Ingresar</button>
+      </div>
+      <form id="authForm">
+        <label id="nameLabel" for="authName">Nombre</label>
+        <input id="authName" name="name" autocomplete="name" minlength="2" placeholder="Tu nombre" required />
+        <label for="authEmail">Correo electrónico</label>
+        <input id="authEmail" name="email" type="email" autocomplete="email" placeholder="nombre@correo.com" required />
+        <label for="authPassword">Contraseña</label>
+        <input id="authPassword" name="password" type="password" autocomplete="new-password" minlength="6" placeholder="Mínimo 6 caracteres" required />
+        <p class="form-message" id="authMessage" role="alert"></p>
+        <button class="button primary full" type="submit" id="authSubmit">Crear mi cuenta</button>
+      </form>
+      <small class="privacy-note">Tu sesión se protege con una cookie segura. Nunca mostramos tu correo en las reseñas.</small>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
