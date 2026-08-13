@@ -4,3 +4,7 @@ yaris211.db
 yaris211.db-shm
 yaris211.db-wal
 test_yaris211.db
+node_modules/
+.dev.vars
+.env
+.wrangler/

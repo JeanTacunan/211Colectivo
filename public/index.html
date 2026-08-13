@@ -42,7 +42,7 @@
       </div>
       <div class="hero-visual reveal">
         <div class="number-mark" aria-hidden="true">211</div>
-        <img src="assets/yaris-211-front.png" alt="Toyota Yaris rojo 211 visto desde el frente" />
+        <img src="assets/yaris-211-front-no-plate.png" alt="Toyota Yaris rojo 211 visto desde el frente" />
         <div class="sale-card">
           <span>Precio referencial</span>
           <strong>S/ 45,000</strong>
@@ -70,7 +70,7 @@
           <span class="edition">EDICIÓN<br><b>211</b></span>
           <p>Frente Lexus · Faros LED<br>Aros deportivos · Alerón MPS</p>
         </div>
-        <img src="assets/yaris-211-rear.png" alt="Vista posterior del Yaris 211 con alerón MPS y luces LED" />
+        <img src="assets/yaris-211-rear-no-plate.png" alt="Vista posterior del Yaris 211 con alerón MPS y luces LED" />
       </div>
 
       <div class="spec-dashboard reveal" aria-label="Ficha técnica del vehículo">
@@ -192,7 +192,7 @@
 
     <section class="closing">
       <div class="closing-copy reveal"><p>Confianza en cada ruta.</p><h2>211</h2><a href="https://www.instagram.com/jeanp.tacunan/" target="_blank" rel="noopener">Hablemos por Instagram ↗</a></div>
-      <img src="assets/yaris-211-front.png" alt="" />
+      <img src="assets/yaris-211-front-no-plate.png" alt="" />
     </section>
   </main>
 
@@ -219,12 +219,24 @@
         <button type="button" role="tab" data-auth-tab="login" aria-selected="false">Ingresar</button>
       </div>
       <form id="authForm">
-        <label id="nameLabel" for="authName">Nombre</label>
-        <input id="authName" name="name" autocomplete="name" minlength="2" placeholder="Tu nombre" required />
+        <div id="dniFields">
+          <label for="authDni">DNI</label>
+          <div class="dni-row">
+            <input id="authDni" name="dni" inputmode="numeric" autocomplete="off" maxlength="8" pattern="[0-9]{8}" placeholder="8 dígitos" required />
+            <button class="button ghost compact" id="validateDniButton" type="button">Validar DNI</button>
+          </div>
+          <label for="authName">Nombre encontrado</label>
+          <input id="authName" name="name" autocomplete="name" placeholder="Valida tu DNI primero" readonly required />
+          <p class="dni-status" id="dniStatus" aria-live="polite"></p>
+        </div>
         <label for="authEmail">Correo electrónico</label>
         <input id="authEmail" name="email" type="email" autocomplete="email" placeholder="nombre@correo.com" required />
         <label for="authPassword">Contraseña</label>
-        <input id="authPassword" name="password" type="password" autocomplete="new-password" minlength="6" placeholder="Mínimo 6 caracteres" required />
+        <input id="authPassword" name="password" type="password" autocomplete="new-password" minlength="8" maxlength="128" placeholder="Mínimo 8 caracteres" required />
+        <div id="confirmPasswordField">
+          <label for="authPasswordConfirm">Confirmar contraseña</label>
+          <input id="authPasswordConfirm" name="passwordConfirm" type="password" autocomplete="new-password" minlength="8" maxlength="128" placeholder="Repite tu contraseña" required />
+        </div>
         <p class="form-message" id="authMessage" role="alert"></p>
         <button class="button primary full" type="submit" id="authSubmit">Crear mi cuenta</button>
       </form>
