@@ -12,7 +12,7 @@
     {
       "binding": "DB",
       "database_name": "yaris211-db",
-      "database_id": "00000000000000000000000000000000",
+      "database_id": "179aab46-46f9-470a-817c-addd29d1e682",
       "migrations_dir": "migrations"
     }
   ],
