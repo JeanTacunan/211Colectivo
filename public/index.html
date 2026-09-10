@@ -21,7 +21,6 @@
       <a href="#horarios">Horarios</a>
       <a href="#resenas">Reseñas</a>
       <a href="#conoceme">Sobre mí</a>
-      <button class="account-button" id="accountButton" type="button">Ingresar</button>
     </nav>
   </header>
 
@@ -145,13 +144,15 @@
       <div class="review-form-wrap" id="reviewComposer" hidden>
         <div class="review-composer-head">
           <div>
-          <span class="auth-badge" id="authBadge">Necesitas una cuenta para calificar</span>
+          <span class="auth-badge" id="authBadge">Tu reseña en la comunidad</span>
           <h3>Califica el servicio</h3>
           </div>
           <button class="composer-close" id="closeReviewComposer" type="button" aria-label="Cerrar formulario">×</button>
         </div>
           <form id="reviewForm">
-            <fieldset class="star-input" id="starInput" disabled>
+            <label for="reviewName">Nombre (opcional)</label>
+            <input id="reviewName" name="reviewName" type="text" maxlength="80" placeholder="Anónimo" />
+            <fieldset class="star-input" id="starInput">
               <legend>Selecciona de 1 a 5 estrellas</legend>
               <div>
                 <button type="button" data-rating="1" aria-label="1 estrella">★</button>
@@ -163,10 +164,9 @@
               <output id="ratingOutput">0 de 5</output>
             </fieldset>
             <label for="reviewText">Cuéntanos tu experiencia</label>
-            <textarea id="reviewText" rows="4" maxlength="280" placeholder="¿Qué fue lo que más valoraste del servicio?" disabled required></textarea>
-            <div class="form-bottom"><small>Máximo 280 caracteres</small><button class="button primary" type="submit" id="submitReview" disabled>Publicar reseña</button></div>
+            <textarea id="reviewText" rows="4" maxlength="280" placeholder="¿Qué fue lo que más valoraste del servicio?" required></textarea>
+            <div class="form-bottom"><small>Máximo 280 caracteres</small><button class="button primary" type="submit" id="submitReview">Publicar reseña</button></div>
           </form>
-          <button class="signin-prompt" id="signinPrompt" type="button">Crear cuenta o ingresar <span>→</span></button>
       </div>
     </section>
 
@@ -205,43 +205,6 @@
   <div class="mobile-action-bar" aria-label="Acciones rápidas">
     <a href="#horarios"><span class="mobile-status-dot" id="mobileStatusDot"></span><span id="mobileStatusText">Ver horario</span></a>
     <a href="https://www.instagram.com/jeanp.tacunan/" target="_blank" rel="noopener"><span class="instagram-icon" aria-hidden="true"><i></i></span> Instagram</a>
-  </div>
-
-  <div class="modal" id="authModal" role="dialog" aria-modal="true" aria-labelledby="authTitle" hidden>
-    <div class="modal-backdrop" data-close-modal></div>
-    <div class="modal-card">
-      <button class="modal-close" type="button" data-close-modal aria-label="Cerrar">×</button>
-      <span class="modal-mark">211</span>
-      <h2 id="authTitle">Únete a la comunidad</h2>
-      <p>Regístrate para dejar una reseña verificada del servicio.</p>
-      <div class="auth-tabs" role="tablist">
-        <button class="active" type="button" role="tab" data-auth-tab="register" aria-selected="true">Crear cuenta</button>
-        <button type="button" role="tab" data-auth-tab="login" aria-selected="false">Ingresar</button>
-      </div>
-      <form id="authForm">
-        <div id="dniFields">
-          <label for="authDni">DNI</label>
-          <div class="dni-row">
-            <input id="authDni" name="dni" inputmode="numeric" autocomplete="off" maxlength="8" pattern="[0-9]{8}" placeholder="8 dígitos" required />
-            <button class="button ghost compact" id="validateDniButton" type="button">Validar DNI</button>
-          </div>
-          <label for="authName">Nombre encontrado</label>
-          <input id="authName" name="name" autocomplete="name" placeholder="Valida tu DNI primero" readonly required />
-          <p class="dni-status" id="dniStatus" aria-live="polite"></p>
-        </div>
-        <label for="authEmail">Correo electrónico</label>
-        <input id="authEmail" name="email" type="email" autocomplete="email" placeholder="nombre@correo.com" required />
-        <label for="authPassword">Contraseña</label>
-        <input id="authPassword" name="password" type="password" autocomplete="new-password" minlength="8" maxlength="128" placeholder="Mínimo 8 caracteres" required />
-        <div id="confirmPasswordField">
-          <label for="authPasswordConfirm">Confirmar contraseña</label>
-          <input id="authPasswordConfirm" name="passwordConfirm" type="password" autocomplete="new-password" minlength="8" maxlength="128" placeholder="Repite tu contraseña" required />
-        </div>
-        <p class="form-message" id="authMessage" role="alert"></p>
-        <button class="button primary full" type="submit" id="authSubmit">Crear mi cuenta</button>
-      </form>
-      <small class="privacy-note">Tu sesión se protege con una cookie segura. Nunca mostramos tu correo en las reseñas.</small>
-    </div>
   </div>
 
   <script src="script.js"></script>

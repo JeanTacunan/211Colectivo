@@ -62,7 +62,13 @@ async function validateDniEndpoint(request, env) {
     return json({ success: false, error: "No encontramos una persona asociada a ese DNI." }, 404);
   }
   if (response.status === 429) return json({ success: false, error: "El servicio de validación está ocupado. Inténtalo en unos minutos." }, 429);
-  if (!response.ok) return serviceUnavailable();
+  if (!response.ok) {
+    console.error("Decolecta DNI error status:", response.status);
+    return json({
+      success: false,
+      error: `Error del proveedor DNI (${response.status})`
+    }, 502);
+  }
 
   const providerData = await response.json().catch(() => null);
   const person = normalizeDniPerson(providerData);
@@ -74,27 +80,46 @@ async function validateDniEndpoint(request, env) {
 
 async function register(request, env) {
   const body = await readJson(request);
-  if (!env.SESSION_SECRET) return json({ success: false, error: "El registro no está disponible temporalmente." }, 503);
+  if (!env.SESSION_SECRET || !env.DNI_HASH_SECRET) return json({ success: false, error: "El registro no está disponible temporalmente." }, 503);
+
   const email = normalizeEmail(body?.email);
   if (!body || !email || !validateEmail(email)) return json({ success: false, error: "Ingresa un correo electrónico válido." }, 400);
+
   const passwordError = validatePassword(body.password, body.passwordConfirm);
   if (passwordError) return json({ success: false, error: passwordError }, 400);
-  const proof = await verifyProof(body.proof, env.SESSION_SECRET);
-  if (!proof) return json({ success: false, error: "La validación del DNI venció. Valídalo nuevamente." }, 400);
-  const existing = await env.DB.prepare("SELECT dni_hash, email FROM users WHERE dni_hash = ? OR email = ?").bind(proof.dniHash, email).first();
-  if (existing?.dni_hash === proof.dniHash) return json({ success: false, error: "Ese DNI ya está registrado." }, 409);
+
+  const proof = typeof body?.proof === "string" ? await verifyProof(body.proof, env.SESSION_SECRET) : null;
+  let dniHash;
+  let dniLast4;
+  let name;
+
+  if (proof) {
+    dniHash = proof.dniHash;
+    dniLast4 = proof.dniLast4;
+    name = cleanName(proof.name);
+  } else {
+    if (!validateDni(body?.dni)) return json({ success: false, error: "El DNI debe contener exactamente 8 dígitos." }, 400);
+    const dni = String(body.dni).trim();
+    name = cleanName(body?.name);
+    if (!name) return json({ success: false, error: "Ingresa tu nombre completo." }, 400);
+    dniHash = await hmacHex(env.DNI_HASH_SECRET, dni);
+    dniLast4 = dni.slice(-4);
+  }
+
+  const existing = await env.DB.prepare("SELECT dni_hash, email FROM users WHERE dni_hash = ? OR email = ?").bind(dniHash, email).first();
+  if (existing?.dni_hash === dniHash) return json({ success: false, error: "Ese DNI ya está registrado." }, 409);
   if (existing) return json({ success: false, error: "Ese correo ya está registrado." }, 409);
 
   const userId = crypto.randomUUID();
   const passwordHash = await hashPassword(body.password);
   try {
     await env.DB.prepare("INSERT INTO users (id, dni_hash, dni_last4, name, email, password_hash) VALUES (?, ?, ?, ?, ?, ?)")
-      .bind(userId, proof.dniHash, proof.dniLast4, proof.name, email, passwordHash).run();
+      .bind(userId, dniHash, dniLast4, name, email, passwordHash).run();
   } catch (error) {
     if (String(error).includes("UNIQUE")) return json({ success: false, error: "El DNI o correo ya se encuentra registrado." }, 409);
     throw error;
   }
-  return createSessionResponse(request, env, { id: userId, name: proof.name, email }, 201);
+  return createSessionResponse(request, env, { id: userId, name, email }, 201);
 }
 
 async function login(request, env) {
@@ -122,25 +147,30 @@ async function me(request, env) {
 async function listReviews(request, env) {
   const user = await currentUser(request, env);
   const [itemsResult, summary] = await env.DB.batch([
-    env.DB.prepare("SELECT u.name, r.rating, r.comment, r.created_at, r.updated_at, CASE WHEN r.user_id = ? THEN 1 ELSE 0 END AS mine FROM reviews r JOIN users u ON u.id = r.user_id ORDER BY r.updated_at DESC LIMIT 100").bind(user?.id || ""),
+    env.DB.prepare("SELECT r.author_name, r.rating, r.comment, r.created_at, r.updated_at, CASE WHEN r.user_id = ? THEN 1 ELSE 0 END AS mine FROM reviews r LEFT JOIN users u ON u.id = r.user_id ORDER BY r.updated_at DESC LIMIT 100").bind(user?.id || ""),
     env.DB.prepare("SELECT ROUND(COALESCE(AVG(rating), 0), 1) AS average, COUNT(*) AS total FROM reviews")
   ]);
-  const reviews = (itemsResult.results || []).map(row => ({ name: publicName(row.name), rating: row.rating, text: row.comment, date: row.updated_at, mine: Boolean(row.mine) }));
+  const reviews = (itemsResult.results || []).map(row => ({ name: publicName(row.author_name || "Anónimo"), rating: row.rating, text: row.comment, date: row.updated_at, mine: Boolean(row.mine) }));
   return json({ success: true, reviews, average: Number(summary.results?.[0]?.average || 0), total: Number(summary.results?.[0]?.total || 0), myReview: reviews.find(review => review.mine) || null });
 }
 
 async function createReview(request, env) {
-  const user = await requireUser(request, env);
-  if (user instanceof Response) return user;
   const body = await readJson(request);
   const error = validateReview(body?.rating, body?.text);
   if (error) return json({ success: false, error }, 400);
+
+  const user = await currentUser(request, env);
+  const reviewText = body.text.trim();
+  const reviewName = cleanName(body?.name || user?.name || "Anónimo");
+
   try {
-    await env.DB.prepare("INSERT INTO reviews (id, user_id, rating, comment) VALUES (?, ?, ?, ?)").bind(crypto.randomUUID(), user.id, body.rating, body.text.trim()).run();
+    await env.DB.prepare("INSERT INTO reviews (id, user_id, rating, comment, author_name) VALUES (?, ?, ?, ?, ?)")
+      .bind(crypto.randomUUID(), user?.id || null, body.rating, reviewText, reviewName).run();
   } catch (dbError) {
     if (String(dbError).includes("UNIQUE")) return json({ success: false, error: "Ya tienes una reseña. Puedes actualizarla." }, 409);
     throw dbError;
   }
+
   return json({ success: true }, 201);
 }
 
@@ -191,11 +221,51 @@ export function validateReview(rating, text) {
   return null;
 }
 export function normalizeDniPerson(data = {}) {
-  const root = data.data || data;
-  const nombres = cleanName(root.nombres || root.first_name || root.firstName || "");
-  const apellidoPaterno = cleanName(root.apellido_paterno || root.apellidoPaterno || root.first_last_name || "");
-  const apellidoMaterno = cleanName(root.apellido_materno || root.apellidoMaterno || root.second_last_name || "");
-  const nombreCompleto = cleanName(root.nombre_completo || root.nombreCompleto || root.full_name || [nombres, apellidoPaterno, apellidoMaterno].filter(Boolean).join(" "));
+  const wantedKeys = new Set([
+    "nombres", "nombre", "names", "name",
+    "first_name", "firstName",
+    "apellido_paterno", "apellidoPaterno", "first_last_name", "firstLastName",
+    "apellido", "surname", "lastName", "paterno",
+    "apellido_materno", "apellidoMaterno", "second_last_name", "secondLastName",
+    "maternalSurname", "maternal_surname", "materno", "secondSurname",
+    "nombre_completo", "nombreCompleto", "full_name", "fullName"
+  ]);
+
+  const candidates = [
+    data,
+    data?.data,
+    data?.result,
+    data?.person,
+    data?.persona,
+    data?.response,
+    data?.details,
+    data?.payload,
+    data?.document
+  ].filter(Boolean);
+
+  const root = candidates.find(candidate => candidate && Object.keys(candidate).some(key => wantedKeys.has(key))) ||
+    candidates.find(candidate => candidate && Object.keys(candidate).length > 0) || {};
+
+  const nombres = cleanName(
+    root.nombres ||
+    root.first_name || root.firstName || root.name || root.names || root.nombre || root.nombresPerson || ""
+  );
+
+  const apellidoPaterno = cleanName(
+    root.apellido_paterno || root.apellidoPaterno || root.first_last_name || root.firstLastName ||
+    root.apellido || root.surname || root.lastName || root.paterno || root.last_name || ""
+  );
+
+  const apellidoMaterno = cleanName(
+    root.apellido_materno || root.apellidoMaterno || root.second_last_name || root.secondLastName ||
+    root.maternalSurname || root.maternal_surname || root.materno || root.secondSurname || ""
+  );
+
+  const nombreCompleto = cleanName(
+    root.nombre_completo || root.nombreCompleto || root.full_name || root.fullName ||
+    [nombres, apellidoPaterno, apellidoMaterno].filter(Boolean).join(" ") || ""
+  );
+
   return { nombres, apellidoPaterno, apellidoMaterno, nombreCompleto };
 }
 

@@ -1,6 +1,6 @@
 const $ = (selector, scope = document) => scope.querySelector(selector);
 const $$ = (selector, scope = document) => [...scope.querySelectorAll(selector)];
-const state = { authMode: "register", rating: 0, user: null, reviews: [], average: 0, total: 0, myReview: null, showAllReviews: false, pendingReview: false, dniProof: null };
+const state = { rating: 0, reviews: [], average: 0, total: 0, myReview: null, showAllReviews: false };
 
 async function api(path, options = {}) {
   const response = await fetch(path, { credentials: "same-origin", headers: { "Content-Type": "application/json", ...(options.headers || {}) }, ...options });
@@ -29,81 +29,18 @@ $$('.reveal').forEach(element => observer.observe(element));
 $(".menu-toggle").addEventListener("click", event => { const open = $("#mainNav").classList.toggle("open"); event.currentTarget.setAttribute("aria-expanded", String(open)); });
 $$('#mainNav a').forEach(link => link.addEventListener("click", () => { $("#mainNav").classList.remove("open"); $(".menu-toggle").setAttribute("aria-expanded", "false"); }));
 
-const modal = $("#authModal");
-function openModal() { modal.hidden = false; document.body.classList.add("modal-open"); setTimeout(() => $(state.authMode === "register" ? "#authDni" : "#authEmail").focus(), 20); }
-function closeModal(resetPending = true) { modal.hidden = true; document.body.classList.remove("modal-open"); $("#authMessage").textContent = ""; if (resetPending) state.pendingReview = false; }
-function resetDni() { state.dniProof = null; $("#authName").value = ""; $("#dniStatus").textContent = ""; $("#dniStatus").classList.remove("error"); }
-function setAuthMode(mode) {
-  state.authMode = mode;
-  $$('[data-auth-tab]').forEach(tab => { const active = tab.dataset.authTab === mode; tab.classList.toggle("active", active); tab.setAttribute("aria-selected", String(active)); });
-  const registering = mode === "register";
-  $("#dniFields").hidden = !registering;
-  $("#authDni").required = registering;
-  $("#authName").required = registering;
-  $("#confirmPasswordField").hidden = !registering;
-  $("#authPasswordConfirm").required = registering;
-  $("#authPassword").autocomplete = registering ? "new-password" : "current-password";
-  $("#authSubmit").textContent = registering ? "Crear mi cuenta" : "Ingresar";
-  $("#authTitle").textContent = registering ? "Únete a la comunidad" : "Qué bueno verte";
-  $("#authMessage").textContent = "";
-}
-
-$("#validateDniButton").addEventListener("click", async () => {
-  const dni = $("#authDni").value;
-  resetDni();
-  if (!/^[0-9]{8}$/.test(dni)) { $("#dniStatus").textContent = "El DNI debe contener exactamente 8 dígitos."; $("#dniStatus").classList.add("error"); return; }
-  const button = $("#validateDniButton"); button.disabled = true; button.textContent = "Validando…";
-  try {
-    const data = await api("/api/dni/validate", { method: "POST", body: JSON.stringify({ dni }) });
-    state.dniProof = data.proof; $("#authName").value = data.person.nombreCompleto; $("#dniStatus").textContent = "✓ DNI encontrado. Revisa tu nombre y completa el registro.";
-  } catch (error) { $("#dniStatus").textContent = error.message; $("#dniStatus").classList.add("error"); }
-  finally { button.disabled = false; button.textContent = "Validar DNI"; }
-});
-$("#authDni").addEventListener("input", event => { event.target.value = event.target.value.replace(/\D/g, "").slice(0, 8); resetDni(); });
-
-$("#accountButton").addEventListener("click", async () => {
-  if (!state.user) return openModal();
-  if (!confirm(`Sesión iniciada como ${state.user.name}. ¿Quieres cerrar sesión?`)) return;
-  try { await api("/api/auth/logout", { method: "POST", body: "{}" }); } finally { state.user = null; state.myReview = null; updateAuthUI(); await loadReviews(); }
-});
-$("#signinPrompt").addEventListener("click", openModal);
-$$('[data-close-modal]').forEach(element => element.addEventListener("click", () => closeModal()));
-$$('[data-auth-tab]').forEach(tab => tab.addEventListener("click", () => setAuthMode(tab.dataset.authTab)));
-document.addEventListener("keydown", event => { if (event.key === "Escape" && !modal.hidden) closeModal(); });
-
-$("#authForm").addEventListener("submit", async event => {
-  event.preventDefault();
-  if (state.authMode === "register" && !state.dniProof) { $("#authMessage").textContent = "Primero valida tu DNI."; return; }
-  const submit = $("#authSubmit"); submit.disabled = true;
-  const payload = { email: $("#authEmail").value.trim().toLowerCase(), password: $("#authPassword").value };
-  if (state.authMode === "register") Object.assign(payload, { passwordConfirm: $("#authPasswordConfirm").value, proof: state.dniProof });
-  try {
-    const data = await api(`/api/auth/${state.authMode}`, { method: "POST", body: JSON.stringify(payload) });
-    state.user = data.user; $("#authForm").reset(); resetDni(); closeModal(false); updateAuthUI(); await loadReviews();
-    if (state.pendingReview) { state.pendingReview = false; openReviewComposer(); } else $("#resenas").scrollIntoView({ behavior: "smooth" });
-  } catch (error) { $("#authMessage").textContent = error.message; }
-  finally { submit.disabled = false; }
-});
-
-function updateAuthUI() {
-  const signed = Boolean(state.user);
-  $("#accountButton").textContent = signed ? state.user.name.split(" ")[0] : "Ingresar";
-  $("#authBadge").textContent = signed ? `Sesión iniciada como ${state.user.name}` : "Necesitas una cuenta para calificar";
-  $("#authBadge").classList.toggle("signed", signed);
-  $("#starInput").disabled = !signed; $("#reviewText").disabled = !signed; $("#submitReview").disabled = !signed; $("#signinPrompt").hidden = signed;
-  if (!signed) $("#reviewComposer").hidden = true;
-}
 function setRating(rating) { state.rating = rating; $$('[data-rating]').forEach(star => star.classList.toggle("active", Number(star.dataset.rating) <= rating)); $("#ratingOutput").textContent = `${rating} de 5`; }
-$$('[data-rating]').forEach(button => button.addEventListener("click", () => state.user ? setRating(Number(button.dataset.rating)) : openModal()));
+$$('[data-rating]').forEach(button => button.addEventListener("click", () => setRating(Number(button.dataset.rating))));
 
 $("#reviewForm").addEventListener("submit", async event => {
   event.preventDefault();
-  if (!state.user) return openModal();
   if (!state.rating) { $("#ratingOutput").textContent = "Selecciona al menos 1 estrella"; return; }
-  const text = $("#reviewText").value.trim(); const submit = $("#submitReview"); submit.disabled = true;
+  const text = $("#reviewText").value.trim();
+  const name = $("#reviewName").value.trim() || "Anónimo";
+  const submit = $("#submitReview"); submit.disabled = true;
   try {
-    await api(state.myReview ? "/api/reviews/mine" : "/api/reviews", { method: state.myReview ? "PUT" : "POST", body: JSON.stringify({ rating: state.rating, text }) });
-    $("#ratingOutput").textContent = state.myReview ? "Reseña actualizada." : "Reseña publicada. Puedes actualizarla cuando quieras."; await loadReviews();
+    await api("/api/reviews", { method: "POST", body: JSON.stringify({ rating: state.rating, text, name }) });
+    $("#ratingOutput").textContent = "Reseña publicada."; $("#reviewForm").reset(); setRating(0); await loadReviews();
   } catch (error) { $("#ratingOutput").textContent = error.message; }
   finally { submit.disabled = false; }
 });
@@ -118,9 +55,9 @@ function renderReviews() {
   feed.innerHTML = visible.map(review => `<article class="review-card"><div class="review-card-top"><strong>${escapeHTML(review.name)}</strong><span class="review-stars" aria-label="${review.rating} de 5 estrellas">${"★".repeat(review.rating)}${"☆".repeat(5-review.rating)}</span></div><p>${escapeHTML(review.text)}</p><time datetime="${review.date}">${new Intl.DateTimeFormat("es-PE", { dateStyle: "long" }).format(new Date(review.date))}</time></article>`).join("");
 }
 $("#toggleReviewsButton").addEventListener("click", () => { state.showAllReviews = !state.showAllReviews; renderReviews(); });
-$("#writeReviewButton").addEventListener("click", () => { if (!state.user) { state.pendingReview = true; return openModal(); } openReviewComposer(); });
-function openReviewComposer() { $("#reviewComposer").hidden = false; if (state.myReview) { $("#reviewText").value = state.myReview.text; setRating(state.myReview.rating); $("#submitReview").textContent = "Actualizar reseña"; } else { $("#reviewText").value = ""; setRating(0); $("#submitReview").textContent = "Publicar reseña"; } $("#reviewComposer").scrollIntoView({ behavior: "smooth", block: "center" }); }
+$("#writeReviewButton").addEventListener("click", () => openReviewComposer());
+function openReviewComposer() { $("#reviewComposer").hidden = false; $("#reviewText").value = ""; $("#reviewName").value = ""; setRating(0); $("#submitReview").textContent = "Publicar reseña"; $("#reviewComposer").scrollIntoView({ behavior: "smooth", block: "center" }); }
 $("#closeReviewComposer").addEventListener("click", () => { $("#reviewComposer").hidden = true; $("#writeReviewButton").focus(); });
 async function loadReviews() { try { const data = await api("/api/reviews"); Object.assign(state, { reviews: data.reviews || [], average: data.average || 0, total: data.total || 0, myReview: data.myReview || null }); renderReviews(); } catch { $("#reviewFeed").innerHTML = '<div class="empty-reviews"><span>!</span><strong>No pudimos cargar las reseñas</strong><p>Vuelve a intentarlo en un momento.</p></div>'; } }
-async function initialize() { setAuthMode("register"); updateStatus(); try { state.user = (await api("/api/auth/me")).user; } catch { state.user = null; } updateAuthUI(); await loadReviews(); }
+async function initialize() { updateStatus(); await loadReviews(); }
 initialize(); setInterval(updateStatus, 60000);

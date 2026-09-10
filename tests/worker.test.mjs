@@ -13,6 +13,15 @@ test("normaliza solo nombres y apellidos", () => {
   });
 });
 
+test("normaliza variantes del payload del proveedor", () => {
+  assert.deepEqual(normalizeDniPerson({ data: { nombre: "JEAN PAUL", apellido: "TACUNAN", maternalSurname: "TEST" } }), {
+    nombres: "JEAN PAUL", apellidoPaterno: "TACUNAN", apellidoMaterno: "TEST", nombreCompleto: "JEAN PAUL TACUNAN TEST"
+  });
+  assert.deepEqual(normalizeDniPerson({ person: { names: "JEAN", surname: "TACUNAN", secondSurname: "TEST" } }), {
+    nombres: "JEAN", apellidoPaterno: "TACUNAN", apellidoMaterno: "TEST", nombreCompleto: "JEAN TACUNAN TEST"
+  });
+});
+
 test("valida correo y contraseña", () => {
   assert.equal(validateEmail("persona@correo.pe"), true);
   assert.equal(validateEmail("correo-invalido"), false);
