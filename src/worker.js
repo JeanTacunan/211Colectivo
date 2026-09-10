@@ -146,11 +146,23 @@ async function me(request, env) {
 
 async function listReviews(request, env) {
   const user = await currentUser(request, env);
+  const reviewColumns = await reviewTableColumns(env);
+  const supportsAuthorName = reviewColumns.has("author_name");
   const [itemsResult, summary] = await env.DB.batch([
-    env.DB.prepare("SELECT r.author_name, r.rating, r.comment, r.created_at, r.updated_at, CASE WHEN r.user_id = ? THEN 1 ELSE 0 END AS mine FROM reviews r LEFT JOIN users u ON u.id = r.user_id ORDER BY r.updated_at DESC LIMIT 100").bind(user?.id || ""),
+    env.DB.prepare(
+      supportsAuthorName
+        ? "SELECT r.author_name, r.rating, r.comment, r.created_at, r.updated_at, CASE WHEN r.user_id = ? THEN 1 ELSE 0 END AS mine FROM reviews r LEFT JOIN users u ON u.id = r.user_id ORDER BY r.updated_at DESC LIMIT 100"
+        : "SELECT u.name, r.rating, r.comment, r.created_at, r.updated_at, CASE WHEN r.user_id = ? THEN 1 ELSE 0 END AS mine FROM reviews r LEFT JOIN users u ON u.id = r.user_id ORDER BY r.updated_at DESC LIMIT 100"
+    ).bind(user?.id || ""),
     env.DB.prepare("SELECT ROUND(COALESCE(AVG(rating), 0), 1) AS average, COUNT(*) AS total FROM reviews")
   ]);
-  const reviews = (itemsResult.results || []).map(row => ({ name: publicName(row.author_name || "Anónimo"), rating: row.rating, text: row.comment, date: row.updated_at, mine: Boolean(row.mine) }));
+  const reviews = (itemsResult.results || []).map(row => ({
+    name: publicName(supportsAuthorName ? (row.author_name || "Anónimo") : (row.name || "Anónimo")),
+    rating: row.rating,
+    text: row.comment,
+    date: row.updated_at,
+    mine: Boolean(row.mine)
+  }));
   const total = Number(summary.results?.[0]?.total || 0);
   const average = total ? Number(summary.results?.[0]?.average || 0) : 5;
   return json({ success: true, reviews, average, total, myReview: reviews.find(review => review.mine) || null });
@@ -164,10 +176,28 @@ async function createReview(request, env) {
   const user = await currentUser(request, env);
   const reviewText = body.text.trim();
   const reviewName = cleanName(body?.name || user?.name || "Anónimo");
+  const reviewColumns = await reviewTableColumns(env);
+  const supportsAuthorName = reviewColumns.has("author_name");
+
+  let reviewUser = user;
+  if (!reviewUser) {
+    const userId = crypto.randomUUID();
+    const generatedEmail = `anon-${userId}@local.invalid`;
+    const generatedPasswordHash = await hashPassword(randomToken());
+    const generatedDniHash = await sha256Hex(userId);
+    await env.DB.prepare("INSERT INTO users (id, dni_hash, dni_last4, name, email, password_hash) VALUES (?, ?, ?, ?, ?, ?)")
+      .bind(userId, generatedDniHash, "0000", reviewName, generatedEmail, generatedPasswordHash).run();
+    reviewUser = { id: userId, name: reviewName };
+  }
 
   try {
-    await env.DB.prepare("INSERT INTO reviews (id, user_id, rating, comment, author_name) VALUES (?, ?, ?, ?, ?)")
-      .bind(crypto.randomUUID(), user?.id || null, body.rating, reviewText, reviewName).run();
+    if (supportsAuthorName) {
+      await env.DB.prepare("INSERT INTO reviews (id, user_id, rating, comment, author_name) VALUES (?, ?, ?, ?, ?)")
+        .bind(crypto.randomUUID(), reviewUser.id, body.rating, reviewText, reviewName).run();
+    } else {
+      await env.DB.prepare("INSERT INTO reviews (id, user_id, rating, comment) VALUES (?, ?, ?, ?)")
+        .bind(crypto.randomUUID(), reviewUser.id, body.rating, reviewText).run();
+    }
   } catch (dbError) {
     if (String(dbError).includes("UNIQUE")) return json({ success: false, error: "Ya tienes una reseña. Puedes actualizarla." }, 409);
     throw dbError;
@@ -206,6 +236,11 @@ async function currentUser(request, env) {
 
 async function requireUser(request, env) {
   return (await currentUser(request, env)) || json({ success: false, error: "Inicia sesión para publicar una reseña." }, 401);
+}
+
+async function reviewTableColumns(env) {
+  const result = await env.DB.prepare("PRAGMA table_info(reviews)").all();
+  return new Set((result.results || []).map(row => row.name));
 }
 
 export function resolveAverage(averageValue, total) {
