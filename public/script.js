@@ -1,6 +1,6 @@
 const $ = (selector, scope = document) => scope.querySelector(selector);
 const $$ = (selector, scope = document) => [...scope.querySelectorAll(selector)];
-const state = { rating: 0, reviews: [], average: 0, total: 0, myReview: null, showAllReviews: false };
+const state = { rating: 0, hoverRating: 0, reviews: [], average: 0, total: 0, myReview: null, showAllReviews: false };
 
 async function api(path, options = {}) {
   const response = await fetch(path, { credentials: "same-origin", headers: { "Content-Type": "application/json", ...(options.headers || {}) }, ...options });
@@ -29,8 +29,40 @@ $$('.reveal').forEach(element => observer.observe(element));
 $(".menu-toggle").addEventListener("click", event => { const open = $("#mainNav").classList.toggle("open"); event.currentTarget.setAttribute("aria-expanded", String(open)); });
 $$('#mainNav a').forEach(link => link.addEventListener("click", () => { $("#mainNav").classList.remove("open"); $(".menu-toggle").setAttribute("aria-expanded", "false"); }));
 
-function setRating(rating) { state.rating = rating; $$('[data-rating]').forEach(star => star.classList.toggle("active", Number(star.dataset.rating) <= rating)); $("#ratingOutput").textContent = `${rating} de 5`; }
-$$('[data-rating]').forEach(button => button.addEventListener("click", () => setRating(Number(button.dataset.rating))));
+function renderStars() {
+  const visibleRating = state.hoverRating || state.rating;
+  $$('[data-rating]').forEach(star => {
+    const value = Number(star.dataset.rating);
+    star.classList.toggle("active", value <= visibleRating);
+    star.classList.toggle("preview", state.hoverRating > 0 && value <= state.hoverRating);
+  });
+}
+function setRating(rating) {
+  state.rating = rating;
+  state.hoverRating = 0;
+  renderStars();
+  $("#ratingOutput").textContent = `${rating} de 5`;
+}
+$$('[data-rating]').forEach(button => {
+  const value = Number(button.dataset.rating);
+  button.addEventListener("mouseenter", () => {
+    state.hoverRating = value;
+    renderStars();
+  });
+  button.addEventListener("mouseleave", () => {
+    state.hoverRating = 0;
+    renderStars();
+  });
+  button.addEventListener("focus", () => {
+    state.hoverRating = value;
+    renderStars();
+  });
+  button.addEventListener("blur", () => {
+    state.hoverRating = 0;
+    renderStars();
+  });
+  button.addEventListener("click", () => setRating(value));
+});
 
 $("#reviewForm").addEventListener("submit", async event => {
   event.preventDefault();
@@ -48,7 +80,13 @@ $("#reviewForm").addEventListener("submit", async event => {
 function escapeHTML(value) { const div = document.createElement("div"); div.textContent = value; return div.innerHTML; }
 function renderReviews() {
   const feed = $("#reviewFeed"); const toggle = $("#toggleReviewsButton");
-  $("#ratingAverage").textContent = state.average.toFixed(1); $("#ratingCount").textContent = state.total ? `${state.total} ${state.total === 1 ? "reseña" : "reseñas"}` : "Aún no hay reseñas";
+  const ratingAverage = $("#ratingAverage");
+  ratingAverage.textContent = state.average.toFixed(1);
+  ratingAverage.classList.remove("score-good", "score-warning", "score-bad");
+  if (state.average >= 4.5) ratingAverage.classList.add("score-good");
+  else if (state.average >= 3.5) ratingAverage.classList.add("score-warning");
+  else ratingAverage.classList.add("score-bad");
+  $("#ratingCount").textContent = state.total ? `${state.total} ${state.total === 1 ? "reseña" : "reseñas"}` : "Aún no hay reseñas";
   if (!state.reviews.length) { feed.innerHTML = '<div class="empty-reviews"><span>☆</span><strong>Sé la primera persona en calificar</strong><p>Tu reseña ayuda a mejorar el servicio y genera confianza en la comunidad.</p></div>'; toggle.hidden = true; return; }
   toggle.hidden = state.reviews.length <= 3; toggle.textContent = state.showAllReviews ? "Mostrar menos" : `Ver todas las reseñas (${state.reviews.length})`;
   const visible = state.showAllReviews ? state.reviews : state.reviews.slice(0, 3);

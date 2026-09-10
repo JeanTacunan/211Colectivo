@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { normalizeDniPerson, validateDni, validateEmail, validatePassword, validateReview } from "../src/worker.js";
+import { normalizeDniPerson, resolveAverage, validateDni, validateEmail, validatePassword, validateReview } from "../src/worker.js";
 
 test("DNI exige exactamente ocho números", () => {
   assert.equal(validateDni("12345678"), true);
@@ -20,6 +20,11 @@ test("normaliza variantes del payload del proveedor", () => {
   assert.deepEqual(normalizeDniPerson({ person: { names: "JEAN", surname: "TACUNAN", secondSurname: "TEST" } }), {
     nombres: "JEAN", apellidoPaterno: "TACUNAN", apellidoMaterno: "TEST", nombreCompleto: "JEAN TACUNAN TEST"
   });
+});
+
+test("promedio global arranca en 5 cuando no hay reseñas", () => {
+  assert.equal(resolveAverage(0, 0), 5);
+  assert.equal(resolveAverage(4.5, 3), 4.5);
 });
 
 test("valida correo y contraseña", () => {

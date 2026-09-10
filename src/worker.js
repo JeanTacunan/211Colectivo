@@ -151,7 +151,9 @@ async function listReviews(request, env) {
     env.DB.prepare("SELECT ROUND(COALESCE(AVG(rating), 0), 1) AS average, COUNT(*) AS total FROM reviews")
   ]);
   const reviews = (itemsResult.results || []).map(row => ({ name: publicName(row.author_name || "Anónimo"), rating: row.rating, text: row.comment, date: row.updated_at, mine: Boolean(row.mine) }));
-  return json({ success: true, reviews, average: Number(summary.results?.[0]?.average || 0), total: Number(summary.results?.[0]?.total || 0), myReview: reviews.find(review => review.mine) || null });
+  const total = Number(summary.results?.[0]?.total || 0);
+  const average = total ? Number(summary.results?.[0]?.average || 0) : 5;
+  return json({ success: true, reviews, average, total, myReview: reviews.find(review => review.mine) || null });
 }
 
 async function createReview(request, env) {
@@ -206,6 +208,9 @@ async function requireUser(request, env) {
   return (await currentUser(request, env)) || json({ success: false, error: "Inicia sesión para publicar una reseña." }, 401);
 }
 
+export function resolveAverage(averageValue, total) {
+  return Number(total) > 0 ? Number(averageValue || 0) : 5;
+}
 export function validateDni(value) { return typeof value === "string" && /^[0-9]{8}$/.test(value); }
 export function validateEmail(value) { return typeof value === "string" && value.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value); }
 export function validatePassword(password, confirmation) {
