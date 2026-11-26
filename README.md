@@ -1,6 +1,6 @@
-# 211 Yaris
+# 152 Yaris
 
-Web móvil y de escritorio para el servicio de colectivo nocturno 211 Yaris. Conserva el diseño V2 e incorpora autenticación, validación de DNI y reseñas mediante Cloudflare Workers + D1.
+Web móvil y de escritorio para el servicio de colectivo nocturno 152 Yaris. Conserva el diseño V2 e incorpora autenticación, validación de DNI y reseñas mediante Cloudflare Workers + D1.
 
 ## Arquitectura
 
@@ -70,3 +70,9 @@ Las versiones originales se conservan. La web utiliza `yaris-211-front-no-plate.
 ## Créditos
 
 Logotipo de Universidad Continental: Marcomogollon, [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Ucontinental-logotipo.png), licencia CC BY-SA 4.0.
+
+## Control de versiones
+
+La versi?n inicial documentada para la flota 152 es `1.1.0`, definida en `package.json` y `package-lock.json`. Los cambios se registran en `CHANGELOG.md`. Usar versiones MAJOR.MINOR.PATCH y etiquetas Git `vX.Y.Z` para entregas aprobadas; incrementar con `npm version patch`, `minor` o `major` sobre un ?rbol limpio.
+
+El cambio de flota afecta la identidad p?blica. Se conservan los identificadores existentes de Cloudflare, D1, cookies y archivos fotogr?ficos para mantener continuidad de datos y sesiones. El desarrollo usa exclusivamente recursos locales (`npm run db:local` y `npm run dev`).
