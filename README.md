@@ -1,4 +1,4 @@
-# 152 Yaris · 1.2.0
+# 152 Yaris · 1.2.1
 
 Frontend estático y backend en Cloudflare Workers con usuarios, sesiones y reseñas en D1.
 
@@ -53,7 +53,7 @@ Ejecutar npm run lint y npm test. Se verifica conservación de datos, campos obl
 
 ## Versiones y producción
 
-package.json, package-lock.json, footer y CHANGELOG.md registran 1.2.0 según SemVer.
+package.json, package-lock.json, footer y CHANGELOG.md registran 1.2.1 según SemVer. Al guardar una reseña se muestra una confirmación y un botón para verla. Las reseñas permanecen en D1 al recargar o cerrar sesión; editar la reseña propia actualiza la anterior.
 
 No se ha aplicado la migración remota ni desplegado esta versión. Una entrega autorizada requiere respaldo de D1, migraciones pendientes y SESSION_SECRET configurado. Los secretos antiguos del proveedor ya no se usan; su eliminación remota queda pendiente. Las credenciales anteriormente incluidas en Git deben revocarse: limpiar el archivo actual no las elimina del historial.
 

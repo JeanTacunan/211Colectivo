@@ -70,11 +70,20 @@ $("#reviewForm").addEventListener("submit", async event => {
   const text = $("#reviewText").value.trim();
   const name = $("#reviewName").value.trim() || "Anónimo";
   const submit = $("#submitReview"); submit.disabled = true;
+  $("#reviewConfirmation").hidden = true;
+  $("#ratingOutput").textContent = "Guardando reseña…";
   try {
     const isUpdate = Boolean(state.myReview);
     await api("/api/reviews", { method: "POST", body: JSON.stringify({ rating: state.rating, text, name }) });
-    $("#ratingOutput").textContent = isUpdate ? "Reseña actualizada." : "Reseña publicada.";
-    await loadReviews();
+    state.showAllReviews = true;
+    const loaded = await loadReviews();
+    $("#reviewComposer").hidden = true;
+    $("#reviewConfirmationText").textContent = isUpdate ? "¡Tu reseña se actualizó correctamente!" : "¡Tu reseña se publicó correctamente!";
+    $("#viewSavedReview").hidden = !loaded || !state.myReview;
+    if (!loaded) $("#reviewConfirmationText").textContent += " Se guardó, pero no pudimos actualizar la lista. Recarga la página para verla.";
+    $("#reviewConfirmation").hidden = false;
+    $("#reviewConfirmation").focus({ preventScroll: true });
+    $("#reviewConfirmation").scrollIntoView({ behavior: "smooth", block: "center" });
   } catch (error) { $("#ratingOutput").textContent = error.message; }
   finally { submit.disabled = false; }
 });
@@ -110,6 +119,7 @@ function renderReviews() {
 $("#toggleReviewsButton").addEventListener("click", () => { state.showAllReviews = !state.showAllReviews; renderReviews(); });
 $("#writeReviewButton").addEventListener("click", () => openReviewComposer());
 function openReviewComposer() {
+  $("#reviewConfirmation").hidden = true;
   $("#reviewComposer").hidden = false;
   if (state.myReview) {
     $("#reviewText").value = state.myReview.text || "";
@@ -125,7 +135,15 @@ function openReviewComposer() {
   $("#reviewComposer").scrollIntoView({ behavior: "smooth", block: "center" });
 }
 $("#closeReviewComposer").addEventListener("click", () => { $("#reviewComposer").hidden = true; $("#writeReviewButton").focus(); });
-async function loadReviews() { try { const data = await api("/api/reviews"); Object.assign(state, { reviews: data.reviews || [], average: data.average || 0, total: data.total || 0, myReview: data.myReview || null }); renderReviews(); } catch { $("#reviewFeed").innerHTML = '<div class="empty-reviews"><span>!</span><strong>No pudimos cargar las reseñas</strong><p>Vuelve a intentarlo en un momento.</p></div>'; } }
+$("#viewSavedReview").addEventListener("click", () => {
+  const review = $(".my-review");
+  if (review) {
+    review.setAttribute("tabindex", "-1");
+    review.focus({ preventScroll: true });
+    review.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+});
+async function loadReviews() { try { const data = await api("/api/reviews"); Object.assign(state, { reviews: data.reviews || [], average: data.average || 0, total: data.total || 0, myReview: data.myReview || null }); renderReviews(); return true; } catch { $("#reviewFeed").innerHTML = '<div class="empty-reviews"><span>!</span><strong>No pudimos cargar las reseñas</strong><p>Vuelve a intentarlo en un momento.</p></div>'; return false; } }
 async function initialize() { updateStatus(); await Promise.all([loadReviews(), loadAccount()]); }
 
 

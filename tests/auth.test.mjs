@@ -57,5 +57,14 @@ test("auth in Workers + D1: migration preserves data, register/login/logout, thr
     assert.equal((await (await call("/api/auth/me", undefined, resumed.headers.get("set-cookie"))).json()).user, null);
     assert.deepEqual((await db.prepare("SELECT * FROM reviews").all()).results, before.results);
     assert.equal((await call("/api/reviews")).status, 200);
+    const reviewLogin = await call("/api/auth/login", { phone: payload.phone, password: payload.password });
+    const reviewCookie = reviewLogin.headers.get("set-cookie");
+    assert.equal((await call("/api/reviews", { rating: 5, text: "Saved review", name: "Test" }, reviewCookie)).status, 200);
+    const refreshed = await (await call("/api/reviews", undefined, reviewCookie)).json();
+    assert.equal(refreshed.myReview.text, "Saved review");
+    await call("/api/auth/logout", {}, reviewCookie);
+    const publicReviews = await (await call("/api/reviews")).json();
+    assert.ok(publicReviews.reviews.some(review => review.text === "Saved review"), "review persists after logout");
+    assert.ok(publicReviews.reviews.some(review => review.text === "Preserve this review"), "historical review still present");
   } finally { await mf.dispose(); }
 });

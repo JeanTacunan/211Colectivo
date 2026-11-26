@@ -1,5 +1,17 @@
 # Historial de cambios
 
+## [1.2.1] - 2026-11-26
+
+- Confirmación visible y accesible tras publicar o actualizar una reseña, con botón para verla y resaltado de la reseña propia.
+- Mensaje específico cuando el guardado funciona pero no se puede recargar la lista.
+- Verificada la persistencia de reseñas después de nuevas consultas y cierre de sesión, conservando las anteriores.
+
+## [1.2.1] - 2026-11-26
+
+- Confirmación visible y accesible tras publicar o actualizar una reseña, con botón para verla y resaltado de la reseña propia.
+- Mensaje específico cuando el guardado funciona pero no se puede recargar la lista.
+- Verificada la persistencia de reseñas después de nuevas consultas y cierre de sesión, conservando las anteriores.
+
 ## [1.2.0] - 2026-11-26
 
 - Registro con nombres, apellidos, celular y contraseña; inicio con celular, mostrar/ocultar contraseña y cierre de sesión.
