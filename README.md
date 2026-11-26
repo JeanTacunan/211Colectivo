@@ -1,4 +1,4 @@
-# 152 Yaris · 1.2.1
+# 152 Yaris · 1.2.2
 
 Frontend estático y backend en Cloudflare Workers con usuarios, sesiones y reseñas en D1.
 
@@ -29,7 +29,7 @@ Registro e inicio devuelven { success: true, user: { name, phone } } y una cooki
 - users: nombres, apellidos, celular, hash y fechas. Un índice único impide celulares duplicados incluso con registros simultáneos. Consultas parametrizadas.
 - sessions: hash SHA-256 de un token aleatorio de 32 bytes, usuario y vencimiento de 30 días. Cookie HttpOnly, SameSite=Lax y Secure en HTTPS (sin Secure en HTTP local). Al autenticar se sustituye la sesión presentada; al salir se elimina y expira la cookie. Las fechas se comparan con julianday.
 - auth_attempts: contadores atómicos por celular e IP, separados para registro e inicio. Permite 5 intentos por celular y 30 por IP durante 15 minutos, contando también accesos correctos. Devuelve 429 y Retry-After al superar el límite. Claves protegidas con HMAC y SESSION_SECRET, sin celular ni IP en claro; limpieza de ventanas vencidas al siguiente intento.
-- reviews: continúa vinculada a users.id. Se conservan reseñas y publicación anónima.
+- reviews: continúa vinculada a users.id. Se conservan todas las reseñas anteriores. Publicar o editar requiere una cuenta con celular y sesión activa; el autor se toma del nombre y apellidos registrados, nunca de un campo enviado por el navegador. Las reseñas históricas sin cuenta mantienen su atribución anterior.
 
 Contraseñas nuevas: scrypt (N=32768, r=8, p=3), salt aleatorio de 16 bytes y salida de 32 bytes. Se almacena scrypt$32768$8$3$salt$hash, nunca el texto original. Comparación timingSafeEqual. Se conserva lectura de hashes PBKDF2 históricos sin reescribirlos.
 
@@ -53,7 +53,7 @@ Ejecutar npm run lint y npm test. Se verifica conservación de datos, campos obl
 
 ## Versiones y producción
 
-package.json, package-lock.json, footer y CHANGELOG.md registran 1.2.1 según SemVer. Al guardar una reseña se muestra una confirmación y un botón para verla. Las reseñas permanecen en D1 al recargar o cerrar sesión; editar la reseña propia actualiza la anterior.
+package.json, package-lock.json, footer y CHANGELOG.md registran 1.2.2 según SemVer. Al guardar una reseña se muestra una confirmación y un botón para verla. Las reseñas permanecen en D1 al recargar o cerrar sesión; editar la reseña propia actualiza la anterior.
 
 No se ha aplicado la migración remota ni desplegado esta versión. Una entrega autorizada requiere respaldo de D1, migraciones pendientes y SESSION_SECRET configurado. Los secretos antiguos del proveedor ya no se usan; su eliminación remota queda pendiente. Las credenciales anteriormente incluidas en Git deben revocarse: limpiar el archivo actual no las elimina del historial.
 

@@ -109,13 +109,13 @@ async function listReviews(request, env) {
   const [itemsResult, summary] = await env.DB.batch([
     env.DB.prepare(
       supportsAuthorName
-        ? "SELECT r.author_name, r.rating, r.comment, r.created_at, r.updated_at, CASE WHEN r.user_id = ? THEN 1 ELSE 0 END AS mine FROM reviews r LEFT JOIN users u ON u.id = r.user_id ORDER BY r.updated_at DESC LIMIT 100"
-        : "SELECT u.name, r.rating, r.comment, r.created_at, r.updated_at, CASE WHEN r.user_id = ? THEN 1 ELSE 0 END AS mine FROM reviews r LEFT JOIN users u ON u.id = r.user_id ORDER BY r.updated_at DESC LIMIT 100"
+        ? "SELECT u.phone, u.name, r.author_name, r.rating, r.comment, r.created_at, r.updated_at, CASE WHEN r.user_id = ? THEN 1 ELSE 0 END AS mine FROM reviews r LEFT JOIN users u ON u.id = r.user_id ORDER BY r.updated_at DESC LIMIT 100"
+        : "SELECT u.phone, u.name, r.rating, r.comment, r.created_at, r.updated_at, CASE WHEN r.user_id = ? THEN 1 ELSE 0 END AS mine FROM reviews r LEFT JOIN users u ON u.id = r.user_id ORDER BY r.updated_at DESC LIMIT 100"
     ).bind(user?.id || ""),
     env.DB.prepare("SELECT ROUND(COALESCE(AVG(rating), 0), 1) AS average, COUNT(*) AS total FROM reviews")
   ]);
   const reviews = (itemsResult.results || []).map(row => ({
-    name: publicName(supportsAuthorName ? (row.author_name || "Anónimo") : (row.name || "Anónimo")),
+    name: row.phone ? cleanName(row.name) : publicName(supportsAuthorName ? (row.author_name || "Anónimo") : (row.name || "Anónimo")),
     rating: row.rating,
     text: row.comment,
     date: row.updated_at,
@@ -131,24 +131,14 @@ async function createReview(request, env) {
   const error = validateReview(body?.rating, body?.text);
   if (error) return json({ success: false, error }, 400);
 
-  const user = await currentUser(request, env);
+  const user = await requireUser(request, env);
+  if (user instanceof Response) return user;
   const reviewText = body.text.trim();
-  const reviewName = cleanName(body?.name || user?.name || "Anónimo");
+  const reviewName = cleanName(user.name);
   const reviewColumns = await reviewTableColumns(env);
   const supportsAuthorName = reviewColumns.has("author_name");
 
-  let isNewUser = false;
-  let reviewUser = user;
-  if (!reviewUser) {
-    const userId = crypto.randomUUID();
-    const generatedEmail = `anon-${userId}@local.invalid`;
-    const generatedPasswordHash = await hashPassword(randomToken());
-    const legacyKey = "unused:" + userId;
-    await env.DB.prepare("INSERT INTO users (id, dni_hash, dni_last4, name, email, password_hash) VALUES (?, ?, ?, ?, ?, ?)")
-      .bind(userId, legacyKey, "", reviewName, generatedEmail, generatedPasswordHash).run();
-    reviewUser = { id: userId, name: reviewName };
-    isNewUser = true;
-  }
+  const reviewUser = user;
 
   try {
     if (supportsAuthorName) {
@@ -167,9 +157,6 @@ async function createReview(request, env) {
     return json({ success: false, error: "No se pudo guardar la reseña. Inténtalo nuevamente." }, 500);
   }
 
-  if (isNewUser) {
-    return createSessionResponse(request, env, reviewUser, 201);
-  }
 
   return json({ success: true }, 200);
 }
@@ -183,7 +170,7 @@ async function updateReview(request, env) {
 
   const reviewColumns = await reviewTableColumns(env);
   const supportsAuthorName = reviewColumns.has("author_name");
-  const reviewName = cleanName(body?.name || user?.name || "Anónimo");
+  const reviewName = cleanName(user.name);
 
   let result;
   if (supportsAuthorName) {
@@ -216,7 +203,8 @@ async function currentUser(request, env) {
 }
 
 async function requireUser(request, env) {
-  return (await currentUser(request, env)) || json({ success: false, error: "Inicia sesión para publicar una reseña." }, 401);
+  const user = await currentUser(request, env);
+  return (user?.phone ? user : null) || json({ success: false, error: "Inicia sesión para publicar una reseña." }, 401);
 }
 
 async function reviewTableColumns(env) {

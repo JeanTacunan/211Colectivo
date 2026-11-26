@@ -68,13 +68,12 @@ $("#reviewForm").addEventListener("submit", async event => {
   event.preventDefault();
   if (!state.rating) { $("#ratingOutput").textContent = "Selecciona al menos 1 estrella"; return; }
   const text = $("#reviewText").value.trim();
-  const name = $("#reviewName").value.trim() || "Anónimo";
   const submit = $("#submitReview"); submit.disabled = true;
   $("#reviewConfirmation").hidden = true;
   $("#ratingOutput").textContent = "Guardando reseña…";
   try {
     const isUpdate = Boolean(state.myReview);
-    await api("/api/reviews", { method: "POST", body: JSON.stringify({ rating: state.rating, text, name }) });
+    await api("/api/reviews", { method: "POST", body: JSON.stringify({ rating: state.rating, text }) });
     state.showAllReviews = true;
     const loaded = await loadReviews();
     $("#reviewComposer").hidden = true;
@@ -119,16 +118,22 @@ function renderReviews() {
 $("#toggleReviewsButton").addEventListener("click", () => { state.showAllReviews = !state.showAllReviews; renderReviews(); });
 $("#writeReviewButton").addEventListener("click", () => openReviewComposer());
 function openReviewComposer() {
+  if (!account?.phone) {
+    pendingReview = true;
+    renderAccount();
+    authDialog.showModal();
+    $("#authMessage").textContent = "Inicia sesión o crea tu cuenta para publicar una reseña con tu nombre.";
+    return;
+  }
+  $("#reviewAuthor").textContent = account.name;
   $("#reviewConfirmation").hidden = true;
   $("#reviewComposer").hidden = false;
   if (state.myReview) {
     $("#reviewText").value = state.myReview.text || "";
-    $("#reviewName").value = state.myReview.name || "";
     setRating(state.myReview.rating || 0);
     $("#submitReview").textContent = "Actualizar reseña";
   } else {
     $("#reviewText").value = "";
-    $("#reviewName").value = "";
     setRating(0);
     $("#submitReview").textContent = "Publicar reseña";
   }
@@ -148,6 +153,7 @@ async function initialize() { updateStatus(); await Promise.all([loadReviews(), 
 
 
 let account = null;
+let pendingReview = false;
 let authMode = "login";
 const authDialog = $("#authDialog");
 function renderAccount() {
@@ -204,6 +210,11 @@ $("#authForm").addEventListener("submit", async event => {
     $("#reviewComposer").hidden = true;
     renderAccount();
     await loadReviews();
+    if (pendingReview) {
+      pendingReview = false;
+      authDialog.close();
+      openReviewComposer();
+    }
   } catch (error) { $("#authMessage").textContent = error.message; }
   finally { controls.forEach(button => button.disabled = false); }
 });

@@ -1,5 +1,12 @@
 # Historial de cambios
 
+## [1.2.2] - 2026-11-26
+
+- Las nuevas reseñas requieren una cuenta con sesión activa y muestran los nombres y apellidos registrados.
+- Eliminado el campo de autor opcional; el backend ignora nombres enviados por el cliente para evitar suplantación.
+- Acceso al registro/inicio de sesión desde el botón de escribir reseña, continuando después con el formulario.
+- Conservadas las reseñas históricas sin asignarles identidades nuevas.
+
 ## [1.2.1] - 2026-11-26
 
 - Confirmación visible y accesible tras publicar o actualizar una reseña, con botón para verla y resaltado de la reseña propia.

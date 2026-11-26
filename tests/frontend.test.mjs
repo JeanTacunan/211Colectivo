@@ -39,5 +39,5 @@ test("frontend initializes against HTML IDs and switches account/password contro
   nodes.get("#authPassword").value = "temporary password";
   nodes.get("#closeAuth").events.click();
   assert.equal(nodes.get("#authPassword").value, "");
-  assert.match(html, /v1\.2\.1/);
+  assert.match(html, /v1\.2\.2/);
 });
