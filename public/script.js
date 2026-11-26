@@ -71,13 +71,26 @@ $("#reviewForm").addEventListener("submit", async event => {
   const name = $("#reviewName").value.trim() || "Anónimo";
   const submit = $("#submitReview"); submit.disabled = true;
   try {
+    const isUpdate = Boolean(state.myReview);
     await api("/api/reviews", { method: "POST", body: JSON.stringify({ rating: state.rating, text, name }) });
-    $("#ratingOutput").textContent = "Reseña publicada."; $("#reviewForm").reset(); setRating(0); await loadReviews();
+    $("#ratingOutput").textContent = isUpdate ? "Reseña actualizada." : "Reseña publicada.";
+    await loadReviews();
   } catch (error) { $("#ratingOutput").textContent = error.message; }
   finally { submit.disabled = false; }
 });
 
 function escapeHTML(value) { const div = document.createElement("div"); div.textContent = value; return div.innerHTML; }
+function formatDate(dateString) {
+  if (!dateString) return "";
+  try {
+    const isoString = dateString.includes("T") ? dateString : dateString.replace(" ", "T") + "Z";
+    const date = new Date(isoString);
+    if (isNaN(date.getTime())) return "";
+    return new Intl.DateTimeFormat("es-PE", { dateStyle: "long" }).format(date);
+  } catch {
+    return "";
+  }
+}
 function renderReviews() {
   const feed = $("#reviewFeed"); const toggle = $("#toggleReviewsButton");
   const ratingAverage = $("#ratingAverage");
@@ -87,15 +100,106 @@ function renderReviews() {
   else if (state.average >= 3.5) ratingAverage.classList.add("score-warning");
   else ratingAverage.classList.add("score-bad");
   $("#ratingCount").textContent = state.total ? `${state.total} ${state.total === 1 ? "reseña" : "reseñas"}` : "Aún no hay reseñas";
+  if (state.myReview) $("#writeReviewButton").textContent = "Editar mi reseña";
+  else $("#writeReviewButton").textContent = "Escribir una reseña";
   if (!state.reviews.length) { feed.innerHTML = '<div class="empty-reviews"><span>☆</span><strong>Sé la primera persona en calificar</strong><p>Tu reseña ayuda a mejorar el servicio y genera confianza en la comunidad.</p></div>'; toggle.hidden = true; return; }
   toggle.hidden = state.reviews.length <= 3; toggle.textContent = state.showAllReviews ? "Mostrar menos" : `Ver todas las reseñas (${state.reviews.length})`;
   const visible = state.showAllReviews ? state.reviews : state.reviews.slice(0, 3);
-  feed.innerHTML = visible.map(review => `<article class="review-card"><div class="review-card-top"><strong>${escapeHTML(review.name)}</strong><span class="review-stars" aria-label="${review.rating} de 5 estrellas">${"★".repeat(review.rating)}${"☆".repeat(5-review.rating)}</span></div><p>${escapeHTML(review.text)}</p><time datetime="${review.date}">${new Intl.DateTimeFormat("es-PE", { dateStyle: "long" }).format(new Date(review.date))}</time></article>`).join("");
+  feed.innerHTML = visible.map(review => `<article class="review-card${review.mine ? " my-review" : ""}"><div class="review-card-top"><strong>${escapeHTML(review.name)}${review.mine ? " (Tú)" : ""}</strong><span class="review-stars" aria-label="${review.rating} de 5 estrellas">${"★".repeat(review.rating)}${"☆".repeat(5-review.rating)}</span></div><p>${escapeHTML(review.text)}</p><time datetime="${review.date}">${formatDate(review.date)}</time></article>`).join("");
 }
 $("#toggleReviewsButton").addEventListener("click", () => { state.showAllReviews = !state.showAllReviews; renderReviews(); });
 $("#writeReviewButton").addEventListener("click", () => openReviewComposer());
-function openReviewComposer() { $("#reviewComposer").hidden = false; $("#reviewText").value = ""; $("#reviewName").value = ""; setRating(0); $("#submitReview").textContent = "Publicar reseña"; $("#reviewComposer").scrollIntoView({ behavior: "smooth", block: "center" }); }
+function openReviewComposer() {
+  $("#reviewComposer").hidden = false;
+  if (state.myReview) {
+    $("#reviewText").value = state.myReview.text || "";
+    $("#reviewName").value = state.myReview.name || "";
+    setRating(state.myReview.rating || 0);
+    $("#submitReview").textContent = "Actualizar reseña";
+  } else {
+    $("#reviewText").value = "";
+    $("#reviewName").value = "";
+    setRating(0);
+    $("#submitReview").textContent = "Publicar reseña";
+  }
+  $("#reviewComposer").scrollIntoView({ behavior: "smooth", block: "center" });
+}
 $("#closeReviewComposer").addEventListener("click", () => { $("#reviewComposer").hidden = true; $("#writeReviewButton").focus(); });
 async function loadReviews() { try { const data = await api("/api/reviews"); Object.assign(state, { reviews: data.reviews || [], average: data.average || 0, total: data.total || 0, myReview: data.myReview || null }); renderReviews(); } catch { $("#reviewFeed").innerHTML = '<div class="empty-reviews"><span>!</span><strong>No pudimos cargar las reseñas</strong><p>Vuelve a intentarlo en un momento.</p></div>'; } }
-async function initialize() { updateStatus(); await loadReviews(); }
+async function initialize() { updateStatus(); await Promise.all([loadReviews(), loadAccount()]); }
+
+
+let account = null;
+let authMode = "login";
+const authDialog = $("#authDialog");
+function renderAccount() {
+  const signedIn = Boolean(account?.phone);
+  $("#authSignedOut").hidden = signedIn;
+  $("#authSignedIn").hidden = !signedIn;
+  $("#accountButton").textContent = signedIn ? "Mi cuenta · Conectado" : "Mi cuenta";
+  $("#accountName").textContent = account?.name || "";
+}
+async function loadAccount() {
+  try { account = (await api("/api/auth/me")).user; } catch { account = null; }
+  renderAccount();
+}
+function setAuthMode(mode) {
+  authMode = mode;
+  const registering = mode === "register";
+  $("#registerFields").hidden = !registering;
+  $("#registerFields").disabled = !registering;
+  $("#loginTab").classList.toggle("active", !registering);
+  $("#registerTab").classList.toggle("active", registering);
+  $("#loginTab").setAttribute("aria-pressed", String(!registering));
+  $("#registerTab").setAttribute("aria-pressed", String(registering));
+  $("#authSubmit").textContent = registering ? "Crear cuenta" : "Iniciar sesión";
+  $("#authPassword").autocomplete = registering ? "new-password" : "current-password";
+  $("#authMessage").textContent = "";
+}
+$("#accountButton").addEventListener("click", () => { renderAccount(); authDialog.showModal(); });
+$("#closeAuth").addEventListener("click", () => authDialog.close());
+authDialog.addEventListener("close", () => {
+  $("#authPassword").value = "";
+  $("#authPassword").type = "password";
+  $("#togglePassword").textContent = "Mostrar";
+  $("#togglePassword").setAttribute("aria-pressed", "false");
+});
+$("#loginTab").addEventListener("click", () => setAuthMode("login"));
+$("#registerTab").addEventListener("click", () => setAuthMode("register"));
+$("#togglePassword").addEventListener("click", () => {
+  const visible = $("#authPassword").type === "password";
+  $("#authPassword").type = visible ? "text" : "password";
+  $("#togglePassword").textContent = visible ? "Ocultar" : "Mostrar";
+  $("#togglePassword").setAttribute("aria-pressed", String(visible));
+});
+$("#authForm").addEventListener("submit", async event => {
+  event.preventDefault();
+  const payload = Object.fromEntries(new FormData(event.currentTarget));
+  const controls = [$("#authSubmit"), $("#loginTab"), $("#registerTab")];
+  controls.forEach(button => button.disabled = true);
+  $("#authMessage").textContent = "Un momento…";
+  try {
+    const data = await api("/api/auth/" + authMode, { method: "POST", body: JSON.stringify(payload) });
+    account = data.user;
+    $("#authForm").reset();
+    $("#authMessage").textContent = "";
+    $("#reviewComposer").hidden = true;
+    renderAccount();
+    await loadReviews();
+  } catch (error) { $("#authMessage").textContent = error.message; }
+  finally { controls.forEach(button => button.disabled = false); }
+});
+$("#logoutButton").addEventListener("click", async () => {
+  $("#logoutButton").disabled = true;
+  $("#logoutMessage").textContent = "";
+  try {
+    await api("/api/auth/logout", { method: "POST" });
+    account = null;
+    $("#reviewComposer").hidden = true;
+    renderAccount();
+    setAuthMode("login");
+    await loadReviews();
+  } catch (error) { $("#logoutMessage").textContent = error.message; }
+  finally { $("#logoutButton").disabled = false; }
+});
 initialize(); setInterval(updateStatus, 60000);

@@ -16,11 +16,7 @@
       "migrations_dir": "migrations"
     }
   ],
-  "ratelimits": [
-    {
-      "name": "DNI_RATE_LIMITER",
-      "namespace_id": "21101",
-      "simple": { "limit": 5, "period": 60 }
-    }
+  "compatibility_flags": [
+    "nodejs_compat"
   ]
 }

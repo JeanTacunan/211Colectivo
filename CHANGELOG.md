@@ -1,5 +1,16 @@
 # Historial de cambios
 
+## [1.2.0] - 2026-11-26
+
+- Registro con nombres, apellidos, celular y contraseña; inicio con celular, mostrar/ocultar contraseña y cierre de sesión.
+- Formularios adaptables y versión visible en el footer.
+- Eliminados Decolecta, consulta de DNI, comprobantes y credenciales del proveedor en el ejemplo de configuración.
+- Contraseñas scrypt con salt aleatorio; sesiones seguras con rotación y cierre.
+- Límites persistentes de intentos por celular e IP mediante D1 y HMAC.
+- Migración aditiva que conserva usuarios, sesiones y reseñas; índice único para celular.
+- Incorporados los cambios previos de edición de reseñas y fechas.
+- Verificado con Workers y D1 aislados. Migración aplicada solo localmente, sin despliegue.
+
 ## [1.1.0] - 2026-11-26
 
 - Actualizada la identidad p?blica de la flota de 211 a 152 Yaris: navegaci?n, portada, veh?culo, textos alternativos y metadatos.

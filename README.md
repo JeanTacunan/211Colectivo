@@ -1,78 +1,62 @@
-# 152 Yaris
+# 152 Yaris · 1.2.0
 
-Web móvil y de escritorio para el servicio de colectivo nocturno 152 Yaris. Conserva el diseño V2 e incorpora autenticación, validación de DNI y reseñas mediante Cloudflare Workers + D1.
+Frontend estático y backend en Cloudflare Workers con usuarios, sesiones y reseñas en D1.
 
-## Arquitectura
+## Desarrollo local
 
-- `public/`: frontend estático y fotografías del vehículo.
-- `src/worker.js`: API, autenticación, consulta DNI y entrega de assets.
-- `migrations/`: esquema versionado de Cloudflare D1.
-- `tests/`: pruebas unitarias de validaciones y normalización.
-- APIS.NET.PE / Decolecta se consulta únicamente desde el Worker. No existe llamada directa desde el navegador.
+1. Instalar Node.js 22 o superior y ejecutar npm ci.
+2. Crear .dev.vars con SESSION_SECRET aleatorio (32 bytes o más). Está ignorado por Git; .env.example no contiene credenciales.
+3. Ejecutar npm run db:local y npm run dev.
+4. Abrir http://127.0.0.1:8787 y seleccionar Mi cuenta (en celular, dentro del menú).
 
-## Configuración de Cloudflare
+Wrangler usa exclusivamente recursos locales. No requiere DNI, correo ni proveedor externo.
 
-1. Instala Node.js 20 o superior y ejecuta `npm install`.
-2. Autentica Wrangler con `npx wrangler login`.
-3. Crea la base: `npx wrangler d1 create yaris211-db`.
-4. Copia el `database_id` devuelto y reemplaza los 32 ceros de `wrangler.jsonc`.
-5. Aplica el esquema remoto: `npm run db:remote`.
-6. Registra cada secreto, pegando su valor solo cuando Wrangler lo solicite:
+## Flujo de autenticación
 
-```powershell
-npx wrangler secret put DNI_API_TOKEN
-npx wrangler secret put DNI_HASH_SECRET
-npx wrangler secret put SESSION_SECRET
-```
+El formulario envía JSON mediante fetch al mismo origen. El Worker vuelve a validar los campos: nombres y apellidos obligatorios de hasta 80 caracteres cada uno, celular como cadena de nueve dígitos que empieza con 9 y contraseña de 8 a 128 caracteres. La validación del navegador mejora la experiencia; la del backend protege la base.
 
-`DNI_HASH_SECRET` y `SESSION_SECRET` deben ser valores aleatorios, independientes y largos (mínimo recomendado: 32 bytes). No uses los nombres ni valores de `.env.example` como secretos reales.
+| Endpoint | Método | JSON de entrada |
+| --- | --- | --- |
+| /api/auth/register | POST | firstName, lastName, phone, password |
+| /api/auth/login | POST | phone, password |
+| /api/auth/logout | POST | {} |
+| /api/auth/me | GET | Sin cuerpo |
 
-7. Despliega con `npm run deploy`. Para dominio propio, configúralo en Workers & Pages > tu Worker > Settings > Domains & Routes.
+Registro e inicio devuelven { success: true, user: { name, phone } } y una cookie. Los errores devuelven { success: false, error }. Nunca se devuelven contraseñas ni hashes.
 
-### Desarrollo local
+## Almacenamiento y seguridad
 
-Crea `.dev.vars` (está ignorado por Git) con los tres secretos, aplica `npm run db:local` y ejecuta `npm run dev`. El token DNI real no es necesario para probar las validaciones que fallan antes de consultar al proveedor.
+- users: nombres, apellidos, celular, hash y fechas. Un índice único impide celulares duplicados incluso con registros simultáneos. Consultas parametrizadas.
+- sessions: hash SHA-256 de un token aleatorio de 32 bytes, usuario y vencimiento de 30 días. Cookie HttpOnly, SameSite=Lax y Secure en HTTPS (sin Secure en HTTP local). Al autenticar se sustituye la sesión presentada; al salir se elimina y expira la cookie. Las fechas se comparan con julianday.
+- auth_attempts: contadores atómicos por celular e IP, separados para registro e inicio. Permite 5 intentos por celular y 30 por IP durante 15 minutos, contando también accesos correctos. Devuelve 429 y Retry-After al superar el límite. Claves protegidas con HMAC y SESSION_SECRET, sin celular ni IP en claro; limpieza de ventanas vencidas al siguiente intento.
+- reviews: continúa vinculada a users.id. Se conservan reseñas y publicación anónima.
 
-## Endpoints
+Contraseñas nuevas: scrypt (N=32768, r=8, p=3), salt aleatorio de 16 bytes y salida de 32 bytes. Se almacena scrypt$32768$8$3$salt$hash, nunca el texto original. Comparación timingSafeEqual. Se conserva lectura de hashes PBKDF2 históricos sin reescribirlos.
 
-- `POST /api/dni/validate`: valida formato, aplica rate limiting y consulta Decolecta con Bearer token.
-- `POST /api/auth/register`: crea una cuenta usando la prueba firmada de DNI.
-- `POST /api/auth/login`: inicia sesión.
-- `POST /api/auth/logout`: invalida la sesión.
-- `GET /api/auth/me`: devuelve la sesión actual sin datos sensibles.
-- `GET /api/reviews`: reseñas públicas, promedio y total calculados por D1.
-- `POST /api/reviews`: crea la única reseña de la cuenta.
-- `PUT /api/reviews/mine`: actualiza la reseña propia.
+El celular se valida por formato, no por titularidad. No incluye SMS ni recuperación de contraseña.
 
-## Seguridad y privacidad
+## Migración no destructiva
 
-- DNI: se guarda únicamente HMAC-SHA-256 determinista (`dni_hash`) y sus últimos 4 dígitos. La clave queda en `DNI_HASH_SECRET`.
-- Contraseñas: PBKDF2-SHA-256 con salt aleatorio, 210 000 iteraciones y comparación resistente a diferencias de tiempo.
-- Sesiones: token aleatorio; solo su SHA-256 se guarda en D1. Cookie `HttpOnly`, `SameSite=Lax` y `Secure` en HTTPS.
-- Registro: la validación DNI produce una prueba HMAC firmada, expira en 10 minutos y evita que el nombre sea editado.
-- DNI: límite de 5 consultas por minuto y dirección IP mediante el binding nativo de Cloudflare.
-- SQL: todas las entradas se envían a D1 mediante parámetros preparados.
-- Reseñas públicas: nombre abreviado, estrellas, comentario y fecha; nunca correo, DNI ni identificadores internos.
+0003_phone_auth.sql añade first_name, last_name, phone, el índice único y auth_attempts. No modifica ni elimina registros existentes.
 
-## Verificación
+Las columnas históricas obligatorias dni_hash, dni_last4 y email permanecen para conservar esquema y datos. Los nuevos usuarios tienen marcadores internos sin datos personales en esas columnas, que no intervienen en la autenticación. Las cuentas antiguas conservan phone = NULL y sus sesiones; necesitan una futura vinculación verificada para acceder con celular. Registrar el mismo nombre no fusiona cuentas ni traslada reseñas.
 
-```powershell
-npm run lint
-npm test
-```
+## Archivos y pruebas
 
-Las pruebas de integración con un DNI real requieren una cuenta/token vigente de Decolecta. El proveedor indica actualmente que la consulta DNI dejó de ofrecerse como servicio público por normativa de datos personales; confirma con tu cuenta que el producto RENIEC/DNI esté habilitado antes del despliegue.
+- public/index.html, styles.css y script.js: formularios, mostrar/ocultar contraseña, estado de cuenta y cierre de sesión.
+- src/worker.js: validación, hash, límites, sesiones y reseñas.
+- migrations/: evolución del esquema.
+- tests/auth.test.mjs: integración en Workers y D1 aislados con datos ficticios. No escribe en la base de desarrollo ni en producción.
+- tests/worker.test.mjs: validaciones unitarias.
 
-## Imágenes
+Ejecutar npm run lint y npm test. Se verifica conservación de datos, campos obligatorios, formato de celular, origen, duplicados, cookies, rotación, cierre y expiración de sesión, contraseña incorrecta y límites de intentos.
 
-Las versiones originales se conservan. La web utiliza `yaris-211-front-no-plate.png` y `yaris-211-rear-no-plate.png`, editadas para ocultar la matrícula y mantener transparencia alfa.
+## Versiones y producción
 
-## Créditos
+package.json, package-lock.json, footer y CHANGELOG.md registran 1.2.0 según SemVer.
 
-Logotipo de Universidad Continental: Marcomogollon, [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Ucontinental-logotipo.png), licencia CC BY-SA 4.0.
+No se ha aplicado la migración remota ni desplegado esta versión. Una entrega autorizada requiere respaldo de D1, migraciones pendientes y SESSION_SECRET configurado. Los secretos antiguos del proveedor ya no se usan; su eliminación remota queda pendiente. Las credenciales anteriormente incluidas en Git deben revocarse: limpiar el archivo actual no las elimina del historial.
 
-## Control de versiones
+## Imágenes y créditos
 
-La versi?n inicial documentada para la flota 152 es `1.1.0`, definida en `package.json` y `package-lock.json`. Los cambios se registran en `CHANGELOG.md`. Usar versiones MAJOR.MINOR.PATCH y etiquetas Git `vX.Y.Z` para entregas aprobadas; incrementar con `npm version patch`, `minor` o `major` sobre un ?rbol limpio.
-
-El cambio de flota afecta la identidad p?blica. Se conservan los identificadores existentes de Cloudflare, D1, cookies y archivos fotogr?ficos para mantener continuidad de datos y sesiones. El desarrollo usa exclusivamente recursos locales (`npm run db:local` y `npm run dev`).
+Se conservan los nombres históricos de las fotografías yaris-211-*-no-plate.png. Logotipo Universidad Continental: Marcomogollon, Wikimedia Commons, licencia CC BY-SA 4.0.

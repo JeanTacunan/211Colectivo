@@ -1,38 +1,20 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { normalizeDniPerson, resolveAverage, validateDni, validateEmail, validatePassword, validateReview } from "../src/worker.js";
-
-test("DNI exige exactamente ocho números", () => {
-  assert.equal(validateDni("12345678"), true);
-  for (const value of ["1234567", "123456789", "1234ABCD", " 12345678", "1234-678", 12345678]) assert.equal(validateDni(value), false);
-});
-
-test("normaliza solo nombres y apellidos", () => {
-  assert.deepEqual(normalizeDniPerson({ nombres: "JEAN PAUL", apellido_paterno: "TACUNAN", apellido_materno: "TEST" }), {
-    nombres: "JEAN PAUL", apellidoPaterno: "TACUNAN", apellidoMaterno: "TEST", nombreCompleto: "JEAN PAUL TACUNAN TEST"
-  });
-});
-
-test("normaliza variantes del payload del proveedor", () => {
-  assert.deepEqual(normalizeDniPerson({ data: { nombre: "JEAN PAUL", apellido: "TACUNAN", maternalSurname: "TEST" } }), {
-    nombres: "JEAN PAUL", apellidoPaterno: "TACUNAN", apellidoMaterno: "TEST", nombreCompleto: "JEAN PAUL TACUNAN TEST"
-  });
-  assert.deepEqual(normalizeDniPerson({ person: { names: "JEAN", surname: "TACUNAN", secondSurname: "TEST" } }), {
-    nombres: "JEAN", apellidoPaterno: "TACUNAN", apellidoMaterno: "TEST", nombreCompleto: "JEAN TACUNAN TEST"
-  });
-});
+import { resolveAverage, validatePhone, validName, validatePassword, validateReview } from "../src/worker.js";
 
 test("promedio global arranca en 5 cuando no hay reseñas", () => {
   assert.equal(resolveAverage(0, 0), 5);
   assert.equal(resolveAverage(4.5, 3), 4.5);
 });
 
-test("valida correo y contraseña", () => {
-  assert.equal(validateEmail("persona@correo.pe"), true);
-  assert.equal(validateEmail("correo-invalido"), false);
-  assert.equal(validatePassword("12345678", "12345678"), null);
-  assert.match(validatePassword("1234567", "1234567"), /8 caracteres/);
-  assert.match(validatePassword("12345678", "87654321"), /no coinciden/);
+test("valida celular, nombres y contraseña", () => {
+  assert.equal(validatePhone("900000001"), true);
+  for (const value of ["800000001", "90000000", "9000000001", 900000001, "+51900000001", "900 00001"]) assert.equal(validatePhone(value), false);
+  assert.equal(validatePassword("una-clave-larga"), null);
+  assert.match(validatePassword("corta"), /8 caracteres/);
+  assert.match(validatePassword("x".repeat(129)), /larga/);
+  assert.equal(validName("  "), false);
+  assert.equal(validName("Ana María"), true);
 });
 
 test("valida reseña, estrellas y límite", () => {

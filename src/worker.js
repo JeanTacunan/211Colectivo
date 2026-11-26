@@ -1,8 +1,7 @@
+import { scrypt, pbkdf2, timingSafeEqual as cryptoEqual } from "node:crypto";
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" };
 const SESSION_COOKIE = "yaris211_session";
 const SESSION_DAYS = 30;
-const PROOF_MINUTES = 10;
-const PBKDF2_ITERATIONS = 210000;
 const encoder = new TextEncoder();
 
 export default {
@@ -25,7 +24,6 @@ async function routeApi(request, env, url) {
     return json({ success: false, error: "Solicitud no permitida." }, 403);
   }
 
-  if (url.pathname === "/api/dni/validate" && request.method === "POST") return validateDniEndpoint(request, env);
   if (url.pathname === "/api/auth/register" && request.method === "POST") return register(request, env);
   if (url.pathname === "/api/auth/login" && request.method === "POST") return login(request, env);
   if (url.pathname === "/api/auth/logout" && request.method === "POST") return logout(request, env);
@@ -36,100 +34,60 @@ async function routeApi(request, env, url) {
   return json({ success: false, error: "Ruta no encontrada." }, 404);
 }
 
-async function validateDniEndpoint(request, env) {
-  const body = await readJson(request);
-  if (!body || !validateDni(body.dni)) return json({ success: false, error: "El DNI debe contener exactamente 8 dígitos." }, 400);
-  const ip = request.headers.get("CF-Connecting-IP") || "unknown";
-  if (env.DNI_RATE_LIMITER && !(await env.DNI_RATE_LIMITER.limit({ key: ip })).success) {
-    return json({ success: false, error: "Has realizado varios intentos. Espera un minuto y vuelve a intentar." }, 429);
-  }
-  if (!env.DNI_API_TOKEN || !env.DNI_HASH_SECRET || !env.SESSION_SECRET) return serviceUnavailable();
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 6000);
-  let response;
-  try {
-    response = await fetch(`https://api.decolecta.com/v1/reniec/dni?numero=${encodeURIComponent(body.dni)}`, {
-      headers: { Authorization: `Bearer ${env.DNI_API_TOKEN}`, Accept: "application/json" },
-      signal: controller.signal
-    });
-  } catch {
-    return serviceUnavailable();
-  } finally {
-    clearTimeout(timeout);
-  }
-  if (response.status === 404 || response.status === 400 || response.status === 422) {
-    return json({ success: false, error: "No encontramos una persona asociada a ese DNI." }, 404);
-  }
-  if (response.status === 429) return json({ success: false, error: "El servicio de validación está ocupado. Inténtalo en unos minutos." }, 429);
-  if (!response.ok) {
-    console.error("Decolecta DNI error status:", response.status);
-    return json({
-      success: false,
-      error: `Error del proveedor DNI (${response.status})`
-    }, 502);
-  }
-
-  const providerData = await response.json().catch(() => null);
-  const person = normalizeDniPerson(providerData);
-  if (!person.nombreCompleto) return json({ success: false, error: "No pudimos obtener el nombre asociado a ese DNI." }, 502);
-  const dniHash = await hmacHex(env.DNI_HASH_SECRET, body.dni);
-  const proof = await signProof({ dniHash, dniLast4: body.dni.slice(-4), name: person.nombreCompleto, exp: Date.now() + PROOF_MINUTES * 60000 }, env.SESSION_SECRET);
-  return json({ success: true, person, proof });
+// Reserve attempt slots atomically before expensive password work.
+async function authLimit(request, env, phone, action) {
+  if (!env.SESSION_SECRET) return json({ success: false, error: "El acceso no está disponible temporalmente." }, 503);
+  const now = Math.floor(Date.now() / 1000);
+  const ip = request.headers.get("CF-Connecting-IP") || "local";
+  const keys = await Promise.all([
+    hmacHex(env.SESSION_SECRET, action + ":ip:" + ip),
+    hmacHex(env.SESSION_SECRET, action + ":phone:" + phone)
+  ]);
+  const rows = await env.DB.batch([
+    env.DB.prepare("DELETE FROM auth_attempts WHERE expires_at <= ?").bind(now),
+    ...keys.map(key => env.DB.prepare(
+      "INSERT INTO auth_attempts (key, attempts, expires_at) VALUES (?, 1, ?) ON CONFLICT(key) DO UPDATE SET attempts = attempts + 1 RETURNING attempts, expires_at"
+    ).bind(key, now + 900))
+  ]);
+  const blocked = rows.slice(1).some((r, i) => r.results[0].attempts > (i === 0 ? 30 : 5));
+  if (blocked) return json({ success: false, error: "Demasiados intentos. Espera 15 minutos antes de volver a intentar." }, 429, { "Retry-After": "900" });
+  return null;
 }
 
 async function register(request, env) {
   const body = await readJson(request);
-  if (!env.SESSION_SECRET || !env.DNI_HASH_SECRET) return json({ success: false, error: "El registro no está disponible temporalmente." }, 503);
-
-  const email = normalizeEmail(body?.email);
-  if (!body || !email || !validateEmail(email)) return json({ success: false, error: "Ingresa un correo electrónico válido." }, 400);
-
-  const passwordError = validatePassword(body.password, body.passwordConfirm);
-  if (passwordError) return json({ success: false, error: passwordError }, 400);
-
-  const proof = typeof body?.proof === "string" ? await verifyProof(body.proof, env.SESSION_SECRET) : null;
-  let dniHash;
-  let dniLast4;
-  let name;
-
-  if (proof) {
-    dniHash = proof.dniHash;
-    dniLast4 = proof.dniLast4;
-    name = cleanName(proof.name);
-  } else {
-    if (!validateDni(body?.dni)) return json({ success: false, error: "El DNI debe contener exactamente 8 dígitos." }, 400);
-    const dni = String(body.dni).trim();
-    name = cleanName(body?.name);
-    if (!name) return json({ success: false, error: "Ingresa tu nombre completo." }, 400);
-    dniHash = await hmacHex(env.DNI_HASH_SECRET, dni);
-    dniLast4 = dni.slice(-4);
-  }
-
-  const existing = await env.DB.prepare("SELECT dni_hash, email FROM users WHERE dni_hash = ? OR email = ?").bind(dniHash, email).first();
-  if (existing?.dni_hash === dniHash) return json({ success: false, error: "Ese DNI ya está registrado." }, 409);
-  if (existing) return json({ success: false, error: "Ese correo ya está registrado." }, 409);
-
-  const userId = crypto.randomUUID();
+  if (!body || !validName(body.firstName) || !validName(body.lastName)) return json({ success: false, error: "Ingresa nombres y apellidos (máximo 80 caracteres por campo)." }, 400);
+  if (!validatePhone(body.phone)) return json({ success: false, error: "El celular debe tener 9 dígitos y comenzar con 9." }, 400);
+  const error = validatePassword(body.password);
+  if (error) return json({ success: false, error }, 400);
+  const limited = await authLimit(request, env, body.phone, "register");
+  if (limited) return limited;
+  if (await env.DB.prepare("SELECT id FROM users WHERE phone = ?").bind(body.phone).first()) return json({ success: false, error: "Este celular ya está registrado. Inicia sesión." }, 409);
+  const id = crypto.randomUUID();
+  const firstName = cleanName(body.firstName);
+  const lastName = cleanName(body.lastName);
+  const name = firstName + " " + lastName;
   const passwordHash = await hashPassword(body.password);
   try {
-    await env.DB.prepare("INSERT INTO users (id, dni_hash, dni_last4, name, email, password_hash) VALUES (?, ?, ?, ?, ?, ?)")
-      .bind(userId, dniHash, dniLast4, name, email, passwordHash).run();
+    // Legacy NOT NULL columns are retained for compatibility, never populated with personal identity data.
+    await env.DB.prepare("INSERT INTO users (id, dni_hash, dni_last4, name, email, password_hash, first_name, last_name, phone) VALUES (?, ?, '', ?, ?, ?, ?, ?, ?)")
+      .bind(id, "unused:" + id, name, id + "@phone.invalid", passwordHash, firstName, lastName, body.phone).run();
   } catch (error) {
-    if (String(error).includes("UNIQUE")) return json({ success: false, error: "El DNI o correo ya se encuentra registrado." }, 409);
+    if (String(error).includes("UNIQUE")) return json({ success: false, error: "Este celular ya está registrado. Inicia sesión." }, 409);
     throw error;
   }
-  return createSessionResponse(request, env, { id: userId, name, email }, 201);
+  return createSessionResponse(request, env, { id, name, phone: body.phone }, 201);
 }
 
 async function login(request, env) {
   const body = await readJson(request);
-  const email = normalizeEmail(body?.email);
-  if (!email || typeof body?.password !== "string") return json({ success: false, error: "Ingresa tu correo y contraseña." }, 400);
-  const user = await env.DB.prepare("SELECT id, name, email, password_hash FROM users WHERE email = ? COLLATE NOCASE").bind(email).first();
-  if (!user || !(await verifyPassword(body.password, user.password_hash))) {
-    return json({ success: false, error: "Correo o contraseña incorrectos." }, 401);
-  }
+  if (!validatePhone(body?.phone) || validatePassword(body?.password)) return json({ success: false, error: "Ingresa un celular válido y una contraseña de 8 a 128 caracteres." }, 400);
+  const limited = await authLimit(request, env, body.phone, "login");
+  if (limited) return limited;
+  const user = await env.DB.prepare("SELECT id, name, phone, password_hash FROM users WHERE phone = ?").bind(body.phone).first();
+  // Unknown accounts perform the same expensive hash work.
+  const valid = user ? await verifyPassword(body.password, user.password_hash) : (await hashPassword(body.password), false);
+  if (!valid) return json({ success: false, error: "Celular o contraseña incorrectos." }, 401);
   return createSessionResponse(request, env, user);
 }
 
@@ -179,31 +137,41 @@ async function createReview(request, env) {
   const reviewColumns = await reviewTableColumns(env);
   const supportsAuthorName = reviewColumns.has("author_name");
 
+  let isNewUser = false;
   let reviewUser = user;
   if (!reviewUser) {
     const userId = crypto.randomUUID();
     const generatedEmail = `anon-${userId}@local.invalid`;
     const generatedPasswordHash = await hashPassword(randomToken());
-    const generatedDniHash = await sha256Hex(userId);
+    const legacyKey = "unused:" + userId;
     await env.DB.prepare("INSERT INTO users (id, dni_hash, dni_last4, name, email, password_hash) VALUES (?, ?, ?, ?, ?, ?)")
-      .bind(userId, generatedDniHash, "0000", reviewName, generatedEmail, generatedPasswordHash).run();
+      .bind(userId, legacyKey, "", reviewName, generatedEmail, generatedPasswordHash).run();
     reviewUser = { id: userId, name: reviewName };
+    isNewUser = true;
   }
 
   try {
     if (supportsAuthorName) {
-      await env.DB.prepare("INSERT INTO reviews (id, user_id, rating, comment, author_name) VALUES (?, ?, ?, ?, ?)")
-        .bind(crypto.randomUUID(), reviewUser.id, body.rating, reviewText, reviewName).run();
+      await env.DB.prepare(
+        `INSERT INTO reviews (id, user_id, rating, comment, author_name, updated_at) VALUES (?, ?, ?, ?, ?, datetime('now'))
+         ON CONFLICT(user_id) DO UPDATE SET rating = excluded.rating, comment = excluded.comment, author_name = excluded.author_name, updated_at = datetime('now')`
+      ).bind(crypto.randomUUID(), reviewUser.id, body.rating, reviewText, reviewName).run();
     } else {
-      await env.DB.prepare("INSERT INTO reviews (id, user_id, rating, comment) VALUES (?, ?, ?, ?)")
-        .bind(crypto.randomUUID(), reviewUser.id, body.rating, reviewText).run();
+      await env.DB.prepare(
+        `INSERT INTO reviews (id, user_id, rating, comment, updated_at) VALUES (?, ?, ?, ?, datetime('now'))
+         ON CONFLICT(user_id) DO UPDATE SET rating = excluded.rating, comment = excluded.comment, updated_at = datetime('now')`
+      ).bind(crypto.randomUUID(), reviewUser.id, body.rating, reviewText).run();
     }
   } catch (dbError) {
-    if (String(dbError).includes("UNIQUE")) return json({ success: false, error: "Ya tienes una reseña. Puedes actualizarla." }, 409);
-    throw dbError;
+    console.error("Database error creating/updating review:", dbError);
+    return json({ success: false, error: "No se pudo guardar la reseña. Inténtalo nuevamente." }, 500);
   }
 
-  return json({ success: true }, 201);
+  if (isNewUser) {
+    return createSessionResponse(request, env, reviewUser, 201);
+  }
+
+  return json({ success: true }, 200);
 }
 
 async function updateReview(request, env) {
@@ -212,7 +180,19 @@ async function updateReview(request, env) {
   const body = await readJson(request);
   const error = validateReview(body?.rating, body?.text);
   if (error) return json({ success: false, error }, 400);
-  const result = await env.DB.prepare("UPDATE reviews SET rating = ?, comment = ?, updated_at = datetime('now') WHERE user_id = ?").bind(body.rating, body.text.trim(), user.id).run();
+
+  const reviewColumns = await reviewTableColumns(env);
+  const supportsAuthorName = reviewColumns.has("author_name");
+  const reviewName = cleanName(body?.name || user?.name || "Anónimo");
+
+  let result;
+  if (supportsAuthorName) {
+    result = await env.DB.prepare("UPDATE reviews SET rating = ?, comment = ?, author_name = ?, updated_at = datetime('now') WHERE user_id = ?")
+      .bind(body.rating, body.text.trim(), reviewName, user.id).run();
+  } else {
+    result = await env.DB.prepare("UPDATE reviews SET rating = ?, comment = ?, updated_at = datetime('now') WHERE user_id = ?")
+      .bind(body.rating, body.text.trim(), user.id).run();
+  }
   if (!result.meta?.changes) return json({ success: false, error: "Aún no tienes una reseña para actualizar." }, 404);
   return json({ success: true });
 }
@@ -221,7 +201,8 @@ async function createSessionResponse(request, env, user, status = 200) {
   const token = randomToken();
   const expires = new Date(Date.now() + SESSION_DAYS * 86400000);
   await env.DB.batch([
-    env.DB.prepare("DELETE FROM sessions WHERE expires_at <= datetime('now')"),
+    env.DB.prepare("DELETE FROM sessions WHERE token_hash = ?").bind(await sha256Hex(readCookie(request, SESSION_COOKIE) || "")),
+    env.DB.prepare("DELETE FROM sessions WHERE julianday(expires_at) <= julianday('now')"),
     env.DB.prepare("INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)").bind(await sha256Hex(token), user.id, expires.toISOString())
   ]);
   return json({ success: true, user: publicUser(user) }, status, { "set-cookie": sessionCookie(request, token, expires) });
@@ -230,7 +211,7 @@ async function createSessionResponse(request, env, user, status = 200) {
 async function currentUser(request, env) {
   const token = readCookie(request, SESSION_COOKIE);
   if (!token) return null;
-  return env.DB.prepare("SELECT u.id, u.name, u.email FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ? AND s.expires_at > datetime('now')")
+  return env.DB.prepare("SELECT u.id, u.name, u.phone FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ? AND julianday(s.expires_at) > julianday('now')")
     .bind(await sha256Hex(token)).first();
 }
 
@@ -246,12 +227,11 @@ async function reviewTableColumns(env) {
 export function resolveAverage(averageValue, total) {
   return Number(total) > 0 ? Number(averageValue || 0) : 5;
 }
-export function validateDni(value) { return typeof value === "string" && /^[0-9]{8}$/.test(value); }
-export function validateEmail(value) { return typeof value === "string" && value.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value); }
-export function validatePassword(password, confirmation) {
+export function validatePhone(value) { return typeof value === "string" && /^9[0-9]{8}$/.test(value); }
+export function validName(value) { return typeof value === "string" && value.trim().length > 0 && value.trim().length <= 80; }
+export function validatePassword(password) {
   if (typeof password !== "string" || password.length < 8) return "La contraseña debe tener al menos 8 caracteres.";
   if (password.length > 128) return "La contraseña es demasiado larga.";
-  if (password !== confirmation) return "Las contraseñas no coinciden.";
   return null;
 }
 export function validateReview(rating, text) {
@@ -260,83 +240,28 @@ export function validateReview(rating, text) {
   if (text.trim().length > 280) return "El comentario no puede superar los 280 caracteres.";
   return null;
 }
-export function normalizeDniPerson(data = {}) {
-  const wantedKeys = new Set([
-    "nombres", "nombre", "names", "name",
-    "first_name", "firstName",
-    "apellido_paterno", "apellidoPaterno", "first_last_name", "firstLastName",
-    "apellido", "surname", "lastName", "paterno",
-    "apellido_materno", "apellidoMaterno", "second_last_name", "secondLastName",
-    "maternalSurname", "maternal_surname", "materno", "secondSurname",
-    "nombre_completo", "nombreCompleto", "full_name", "fullName"
-  ]);
-
-  const candidates = [
-    data,
-    data?.data,
-    data?.result,
-    data?.person,
-    data?.persona,
-    data?.response,
-    data?.details,
-    data?.payload,
-    data?.document
-  ].filter(Boolean);
-
-  const root = candidates.find(candidate => candidate && Object.keys(candidate).some(key => wantedKeys.has(key))) ||
-    candidates.find(candidate => candidate && Object.keys(candidate).length > 0) || {};
-
-  const nombres = cleanName(
-    root.nombres ||
-    root.first_name || root.firstName || root.name || root.names || root.nombre || root.nombresPerson || ""
-  );
-
-  const apellidoPaterno = cleanName(
-    root.apellido_paterno || root.apellidoPaterno || root.first_last_name || root.firstLastName ||
-    root.apellido || root.surname || root.lastName || root.paterno || root.last_name || ""
-  );
-
-  const apellidoMaterno = cleanName(
-    root.apellido_materno || root.apellidoMaterno || root.second_last_name || root.secondLastName ||
-    root.maternalSurname || root.maternal_surname || root.materno || root.secondSurname || ""
-  );
-
-  const nombreCompleto = cleanName(
-    root.nombre_completo || root.nombreCompleto || root.full_name || root.fullName ||
-    [nombres, apellidoPaterno, apellidoMaterno].filter(Boolean).join(" ") || ""
-  );
-
-  return { nombres, apellidoPaterno, apellidoMaterno, nombreCompleto };
+function deriveScrypt(password, salt) {
+  return new Promise((resolve, reject) => scrypt(password, salt, 32, { N: 32768, r: 8, p: 3, maxmem: 64 * 1024 * 1024 }, (error, key) => error ? reject(error) : resolve(key)));
 }
-
-async function hashPassword(password) {
+export async function hashPassword(password) {
   const salt = crypto.getRandomValues(new Uint8Array(16));
-  const key = await crypto.subtle.importKey("raw", encoder.encode(password), "PBKDF2", false, ["deriveBits"]);
-  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt, iterations: PBKDF2_ITERATIONS }, key, 256);
-  return `pbkdf2_sha256$${PBKDF2_ITERATIONS}$${base64url(salt)}$${base64url(new Uint8Array(bits))}`;
+  const key = await deriveScrypt(password, salt);
+  return "scrypt$32768$8$3$" + base64url(salt) + "$" + base64url(key);
 }
-
-async function verifyPassword(password, stored) {
-  const [algorithm, iterations, salt, expected] = String(stored).split("$");
-  if (algorithm !== "pbkdf2_sha256" || !iterations || !salt || !expected) return false;
-  const key = await crypto.subtle.importKey("raw", encoder.encode(password), "PBKDF2", false, ["deriveBits"]);
-  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt: fromBase64url(salt), iterations: Number(iterations) }, key, 256);
-  return timingSafeEqual(new Uint8Array(bits), fromBase64url(expected));
-}
-
-async function signProof(payload, secret) {
-  const encoded = base64url(encoder.encode(JSON.stringify(payload)));
-  return `${encoded}.${await hmacBase64url(secret, encoded)}`;
-}
-
-async function verifyProof(value, secret) {
-  if (typeof value !== "string" || !secret) return null;
+export async function verifyPassword(password, stored) {
   try {
-    const [payload, signature] = value.split(".");
-    if (!payload || !signature || !timingSafeEqual(fromBase64url(signature), fromBase64url(await hmacBase64url(secret, payload)))) return null;
-    const parsed = JSON.parse(new TextDecoder().decode(fromBase64url(payload)));
-    return parsed.exp > Date.now() && parsed.dniHash && parsed.name ? parsed : null;
-  } catch { return null; }
+    const parts = String(stored).split("$");
+    let actual, expected;
+    if (parts[0] === "scrypt" && parts[1] === "32768" && parts[2] === "8" && parts[3] === "3" && parts.length === 6) {
+      actual = await deriveScrypt(password, fromBase64url(parts[4]));
+      expected = fromBase64url(parts[5]);
+    } else if (parts[0] === "pbkdf2_sha256" && parts[1] === "210000" && parts.length === 4) {
+      // Read-only compatibility for historical password hashes.
+      actual = await new Promise((resolve, reject) => pbkdf2(password, fromBase64url(parts[2]), 210000, 32, "sha256", (error, key) => error ? reject(error) : resolve(key)));
+      expected = fromBase64url(parts[3]);
+    } else return false;
+    return actual.length === expected.length && cryptoEqual(actual, expected);
+  } catch { return false; }
 }
 
 async function hmacBase64url(secret, value) {
@@ -345,21 +270,18 @@ async function hmacBase64url(secret, value) {
 }
 async function hmacHex(secret, value) { return bytesToHex(fromBase64url(await hmacBase64url(secret, value))); }
 async function sha256Hex(value) { return bytesToHex(new Uint8Array(await crypto.subtle.digest("SHA-256", encoder.encode(value)))); }
-function timingSafeEqual(a, b) { if (a.length !== b.length) return false; let result = 0; for (let i = 0; i < a.length; i++) result |= a[i] ^ b[i]; return result === 0; }
 function randomToken() { return base64url(crypto.getRandomValues(new Uint8Array(32))); }
 function base64url(bytes) { let binary = ""; for (const byte of bytes) binary += String.fromCharCode(byte); return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); }
 function fromBase64url(value) { const padded = value.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((value.length + 3) % 4); return Uint8Array.from(atob(padded), char => char.charCodeAt(0)); }
 function bytesToHex(bytes) { return [...bytes].map(byte => byte.toString(16).padStart(2, "0")).join(""); }
 function cleanName(value) { return String(value || "").trim().replace(/\s+/g, " ").slice(0, 160); }
-function normalizeEmail(value) { return typeof value === "string" ? value.trim().toLowerCase() : ""; }
-function publicUser(user) { return { name: user.name, email: user.email }; }
+function publicUser(user) { return { name: user.name, phone: user.phone || null }; }
 function publicName(name) { const parts = cleanName(name).split(" "); return parts.length > 1 ? `${parts[0]} ${parts[1].charAt(0)}.` : parts[0]; }
 function sameOrigin(request) { const origin = request.headers.get("Origin"); return !origin || origin === new URL(request.url).origin; }
 function readCookie(request, name) { const match = request.headers.get("Cookie")?.match(new RegExp(`(?:^|;\\s*)${name}=([^;]+)`)); return match ? decodeURIComponent(match[1]) : null; }
 function sessionCookie(request, token, expires) { const secure = new URL(request.url).protocol === "https:" ? "; Secure" : ""; return `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax${secure}; Expires=${expires.toUTCString()}`; }
 function clearSessionCookie(request) { const secure = new URL(request.url).protocol === "https:" ? "; Secure" : ""; return `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax${secure}; Max-Age=0`; }
 async function readJson(request) { try { if (Number(request.headers.get("content-length") || 0) > 8192) return null; return await request.json(); } catch { return null; } }
-function serviceUnavailable() { return json({ success: false, error: "El servicio de validación de DNI no está disponible temporalmente." }, 503); }
 function securityHeaders() { return { "x-content-type-options": "nosniff", "referrer-policy": "strict-origin-when-cross-origin", "x-frame-options": "DENY", "permissions-policy": "camera=(), microphone=(), geolocation=()" }; }
 function withSecurityHeaders(response) { const headers = new Headers(response.headers); for (const [key, value] of Object.entries(securityHeaders())) headers.set(key, value); return new Response(response.body, { status: response.status, statusText: response.statusText, headers }); }
 function json(data, status = 200, extraHeaders = {}) { return new Response(JSON.stringify(data), { status, headers: { ...JSON_HEADERS, ...securityHeaders(), ...extraHeaders } }); }

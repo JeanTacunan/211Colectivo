@@ -21,6 +21,7 @@
       <a href="#horarios">Horarios</a>
       <a href="#resenas">Reseñas</a>
       <a href="#conoceme">Sobre mí</a>
+      <button type="button" class="account-button" id="accountButton">Mi cuenta</button>
     </nav>
   </header>
 
@@ -198,7 +199,7 @@
 
   <footer>
     <a class="brand" href="#top"><span>152</span> YARIS</a>
-    <p>Servicio de colectivo · Perú</p>
+    <p>Servicio de colectivo · Perú <span class="app-version">v1.2.0</span></p>
     <p>Desarrollado por <strong>JTP Soluciones Tecnológicas</strong></p>
   </footer>
 
@@ -206,6 +207,46 @@
     <a href="#horarios"><span class="mobile-status-dot" id="mobileStatusDot"></span><span id="mobileStatusText">Ver horario</span></a>
     <a href="https://www.instagram.com/jeanp.tacunan/" target="_blank" rel="noopener"><span class="instagram-icon" aria-hidden="true"><i></i></span> Instagram</a>
   </div>
+
+
+  <dialog id="authDialog" class="account-dialog" aria-labelledby="authTitle">
+    <button type="button" class="modal-close" id="closeAuth" aria-label="Cerrar ventana">×</button>
+    <span class="modal-mark">152</span>
+    <div id="authSignedOut">
+      <h2 id="authTitle">Tu cuenta Yaris</h2>
+      <p>Un acceso sencillo para acompañarte en cada ruta.</p>
+      <div class="auth-tabs" aria-label="Opciones de acceso">
+        <button type="button" id="loginTab" class="active" aria-pressed="true">Iniciar sesión</button>
+        <button type="button" id="registerTab" aria-pressed="false">Crear cuenta</button>
+      </div>
+      <form id="authForm">
+        <fieldset id="registerFields" hidden disabled>
+          <label for="firstName">Nombres</label>
+          <input id="firstName" name="firstName" autocomplete="given-name" maxlength="80" required />
+          <label for="lastName">Apellidos</label>
+          <input id="lastName" name="lastName" autocomplete="family-name" maxlength="80" required />
+        </fieldset>
+        <label for="authPhone">Número de celular</label>
+        <input id="authPhone" name="phone" type="tel" inputmode="numeric" autocomplete="tel-national" pattern="9[0-9]{8}" minlength="9" maxlength="9" placeholder="9XXXXXXXX" aria-describedby="phoneHint" required />
+        <small id="phoneHint">Celular peruano: 9 dígitos, comienza con 9.</small>
+        <label for="authPassword">Contraseña</label>
+        <div class="password-field">
+          <input id="authPassword" name="password" type="password" autocomplete="current-password" minlength="8" maxlength="128" aria-describedby="passwordHint" required />
+          <button type="button" id="togglePassword" aria-controls="authPassword" aria-pressed="false">Mostrar</button>
+        </div>
+        <small id="passwordHint">Entre 8 y 128 caracteres.</small>
+        <p id="authMessage" class="form-message" role="status" aria-live="polite"></p>
+        <button class="button primary" id="authSubmit" type="submit">Iniciar sesión</button>
+      </form>
+    </div>
+    <div id="authSignedIn" hidden>
+      <h2>Bienvenido a bordo</h2>
+      <p id="accountName"></p>
+      <p>Tu sesión está activa en este dispositivo.</p>
+      <button type="button" class="button primary" id="logoutButton">Cerrar sesión</button>
+      <p id="logoutMessage" role="status"></p>
+    </div>
+  </dialog>
 
   <script src="script.js"></script>
 </body>
